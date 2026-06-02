@@ -1,0 +1,296 @@
+import { useState } from 'react';
+import { Lock, Mail, Eye, EyeOff, Loader2, Check, HeartPulse } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import loginBg from '../assets/login_bg.png';
+import { API_URL } from '../config';
+
+export const Login = () => {
+  const navigate = useNavigate();
+  const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch(`${API_URL}/api/auth/authenticate`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let errorMsg = 'Falha na autenticação';
+        try {
+          const data = await response.json();
+          errorMsg = data.error || errorMsg;
+        } catch {
+          errorMsg = `Erro ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      localStorage.setItem('activeRole', data.user.roles[0]); // Define o primeiro perfil como ativo por padrão
+      navigate('/dashboard');
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          setError('Tempo de conexão esgotado. O servidor está demorando muito para responder.');
+        } else {
+          setError(err.message);
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 md:p-8">
+      <div className="max-w-5xl w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[600px]">
+
+        {/* Left Panel - Brand */}
+        <div className="hidden md:flex w-1/2 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 50%, #2563eb 100%)' }}>
+          <img
+            src={loginBg}
+            alt="Owner Health"
+            className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-60"
+          />
+
+          {/* Overlay gradient */}
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(30,58,138,0.95) 0%, rgba(29,78,216,0.3) 60%, transparent 100%)' }} />
+
+          {/* Decorative circles */}
+          <div className="absolute -top-16 -left-16 w-64 h-64 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, #93c5fd, transparent)' }} />
+          <div className="absolute top-1/3 -right-20 w-56 h-56 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, #60a5fa, transparent)' }} />
+          <div className="absolute -bottom-10 -left-10 w-48 h-48 rounded-full opacity-10" style={{ background: 'radial-gradient(circle, #3b82f6, transparent)' }} />
+
+          {/* ECG Line SVG decoration */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-10">
+            <svg viewBox="0 0 400 80" className="w-full" fill="none" stroke="white" strokeWidth="2.5">
+              <polyline points="0,40 60,40 80,10 100,70 120,40 160,40 180,20 200,60 220,40 400,40" />
+            </svg>
+          </div>
+
+          {/* Content */}
+          <div className="relative z-10 flex flex-col justify-between h-full w-full p-10 text-white">
+            {/* Logo top */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg" style={{ background: 'rgba(255,255,255,0.15)' }}>
+                <HeartPulse className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <span className="text-lg font-black tracking-tight">Owner Health</span>
+                <p className="text-xs font-medium opacity-70">Sistema de Gestão Clínica</p>
+              </div>
+            </div>
+
+            {/* Bottom text */}
+            <div className="pb-6 text-center">
+              <h2 className="text-4xl font-black mb-3 drop-shadow-md leading-tight">
+                Bem-vindo de<br />volta!
+              </h2>
+              <p className="text-sm leading-relaxed max-w-xs mx-auto font-medium opacity-80">
+                Acesse o painel do Owner Health para gerenciar pré-atendimentos e otimizar o fluxo da sua clínica.
+              </p>
+
+              {/* Stats row */}
+              <div className="flex justify-center gap-6 mt-6">
+                <div className="text-center">
+                  <p className="text-2xl font-black">98%</p>
+                  <p className="text-xs opacity-70 font-medium">Satisfação</p>
+                </div>
+                <div className="w-px bg-white opacity-20" />
+                <div className="text-center">
+                  <p className="text-2xl font-black">+500</p>
+                  <p className="text-xs opacity-70 font-medium">Clínicas</p>
+                </div>
+                <div className="w-px bg-white opacity-20" />
+                <div className="text-center">
+                  <p className="text-2xl font-black">24/7</p>
+                  <p className="text-xs opacity-70 font-medium">Suporte</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Panel - Form */}
+        <div className="w-full md:w-1/2 flex flex-col justify-center p-10 lg:p-16 bg-white relative animate-fadeIn">
+
+          {/* Mobile logo */}
+          <div className="flex md:hidden items-center gap-2 mb-8 justify-center">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' }}>
+              <HeartPulse className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-lg font-black text-slate-800">Owner Health</span>
+          </div>
+
+          <div className="mb-10 text-center">
+            {/* Desktop icon */}
+            <div className="hidden md:flex w-16 h-16 rounded-2xl items-center justify-center mx-auto mb-5 shadow-lg" style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' }}>
+              <HeartPulse className="w-8 h-8 text-white" />
+            </div>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Entrar</h2>
+            <p className="text-sm text-slate-500 mt-1 font-medium">Acesse sua conta para continuar</p>
+            <div className="w-12 h-1 mx-auto mt-4 rounded-full" style={{ background: 'linear-gradient(90deg, #1d4ed8, #2563eb)' }} />
+          </div>
+
+          <form className="space-y-5" onSubmit={handleLogin}>
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm font-semibold animate-shake flex items-start gap-2">
+                <span className="mt-0.5">⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Email */}
+            <div className="space-y-1.5">
+              <label className="block text-sm font-bold text-slate-700">E-mail</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Mail className="h-5 w-5 text-slate-400" />
+                </div>
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-11 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:bg-white transition-all font-medium placeholder:text-slate-400 text-sm"
+                  style={{ '--tw-ring-color': '#0d9488' } as React.CSSProperties}
+                  onFocus={e => e.currentTarget.style.borderColor = '#0d9488'}
+                  onBlur={e => e.currentTarget.style.borderColor = ''}
+                  placeholder="seu@email.com"
+                  autoComplete="email"
+                />
+              </div>
+            </div>
+
+            {/* Password */}
+            <div className="space-y-1.5">
+              <label className="block text-sm font-bold text-slate-700">Senha</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-slate-400" />
+                </div>
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-11 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:bg-white transition-all font-medium placeholder:text-slate-400 text-sm"
+                  onFocus={e => e.currentTarget.style.borderColor = '#0d9488'}
+                  onBlur={e => e.currentTarget.style.borderColor = ''}
+                  placeholder="sua senha"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  id="toggle-password"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-teal-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Remember me + Forgot */}
+            <div className="flex items-center justify-between pt-1">
+              <label
+                className="flex items-center space-x-2 cursor-pointer group"
+                onClick={() => setRememberMe(!rememberMe)}
+              >
+                <div
+                  className="w-5 h-5 border-2 rounded flex items-center justify-center transition-all"
+                  style={{
+                    background: rememberMe ? '#2563eb' : 'white',
+                    borderColor: rememberMe ? '#2563eb' : '#cbd5e1',
+                  }}
+                >
+                  <Check className={`w-3.5 h-3.5 text-white transition-opacity ${rememberMe ? 'opacity-100' : 'opacity-0'}`} />
+                </div>
+                <span className="text-sm font-semibold text-slate-600 group-hover:text-slate-800 transition-colors">
+                  Lembrar-me
+                </span>
+              </label>
+              <button
+                type="button"
+                onClick={() => alert('Recuperação de senha em desenvolvimento.')}
+                className="text-sm font-bold transition-colors hover:underline"
+                style={{ color: '#2563eb' }}
+              >
+                Esqueceu a senha?
+              </button>
+            </div>
+
+            <button
+              id="btn-login"
+              type="submit"
+              disabled={loading}
+              className="w-full text-white font-bold py-4 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 mt-2 flex items-center justify-center disabled:opacity-70 disabled:transform-none text-sm"
+              style={{
+                background: loading
+                  ? '#1d4ed8'
+                  : 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
+                boxShadow: '0 4px 20px rgba(37, 99, 235, 0.35)',
+              }}
+              onMouseEnter={e => {
+                if (!loading) (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 6px 28px rgba(37, 99, 235, 0.5)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 20px rgba(37, 99, 235, 0.35)';
+              }}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="animate-spin mr-2 h-5 w-5" />
+                  Autenticando...
+                </>
+              ) : 'Entrar'}
+            </button>
+          </form>
+
+          {/* Criação de conta não utilizada
+          <div className="mt-6 text-center">
+            <span className="text-xs font-semibold text-slate-500">Não tem uma conta? </span>
+            <button
+              onClick={() => navigate('/register')}
+              className="text-xs font-bold text-blue-600 hover:underline"
+            >
+              Criar Conta
+            </button>
+          </div>
+          */}
+          {/* Footer */}
+          <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col items-center text-center">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Desenvolvido por</p>
+            <div className="flex items-center gap-2 opacity-50 hover:opacity-100 transition-all cursor-default bg-slate-50 px-4 py-2 rounded-lg border border-slate-100">
+              <div className="w-5 h-5 rounded flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' }}>
+                <HeartPulse className="w-3 h-3 text-white" />
+              </div>
+              <span className="text-xs font-black text-slate-700 uppercase tracking-tight">Owner Health</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

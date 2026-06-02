@@ -1,0 +1,278 @@
+import React, { useState, useEffect } from 'react';
+import { Users, Plus, Trash2 } from 'lucide-react';
+import { API_URL } from '../../config';
+
+export const DependentList: React.FC = () => {
+  const [dependents, setDependents] = useState<any[]>([]);
+  const [clientData, setClientData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const token = localStorage.getItem('token');
+  const userRaw = localStorage.getItem('user');
+  const user = userRaw ? JSON.parse(userRaw) : { email: '' };
+
+  const [form, setForm] = useState({
+    nome: '', cpf: '', data_nascimento: '', endereco: '', email: '', celular: '',
+    plano_empresa: '', plano_nome: '', plano_produto: '', plano_numero_carteirinha: '', senha: ''
+  });
+
+  useEffect(() => {
+    fetchClientAndDependents();
+  }, []);
+
+  const fetchClientAndDependents = async () => {
+    try {
+      const headers = { 'Authorization': `Bearer ${token}` };
+      const res = await fetch(`${API_URL}/api/clients`, { headers });
+      const clients = await res.json();
+      if (Array.isArray(clients)) {
+        const currentClient = clients.find(c => c.email.toLowerCase() === user.email.toLowerCase());
+        if (currentClient) {
+          setClientData(currentClient);
+          const resD = await fetch(`${API_URL}/api/dependents/client/${currentClient.id}`, { headers });
+          const deps = await resD.json();
+          setDependents(Array.isArray(deps) ? deps : []);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddDependent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await fetch(`${API_URL}/api/dependents/client/${clientData.id}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(form)
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao cadastrar dependente');
+      }
+
+      setSuccess('Dependente adicionado com sucesso!');
+      setForm({
+        nome: '', cpf: '', data_nascimento: '', endereco: '', email: '', celular: '',
+        plano_empresa: '', plano_nome: '', plano_produto: '', plano_numero_carteirinha: '', senha: ''
+      });
+      fetchClientAndDependents();
+      setTimeout(() => setShowAddModal(false), 1500);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm('Deseja realmente remover este dependente?')) return;
+    try {
+      const response = await fetch(`${API_URL}/api/dependents/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        fetchClientAndDependents();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-slate-800">Meus Dependentes</h2>
+          <p className="text-xs text-slate-500 font-medium">Gerencie o círculo familiar vinculado à sua conta Free (Máximo 2)</p>
+        </div>
+        <button
+          onClick={() => {
+            if (dependents.length >= 2) {
+              alert('Limite de 2 dependentes excedido para o Plano Free.');
+              return;
+            }
+            setShowAddModal(true);
+          }}
+          className="flex items-center gap-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Novo Dependente ({dependents.length}/2)</span>
+        </button>
+      </div>
+
+      {dependents.length === 0 ? (
+        <div className="text-center py-10 border border-dashed border-slate-100 rounded-2xl">
+          <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+          <p className="text-xs font-bold text-slate-500">Nenhum dependente cadastrado.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {dependents.map(dep => (
+            <div key={dep.id} className="border border-slate-100 bg-slate-50 rounded-2xl p-5 relative flex flex-col justify-between">
+              <button
+                onClick={() => handleDelete(dep.id)}
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-red-500 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              
+              <div>
+                <h4 className="text-sm font-bold text-slate-800">{dep.nome}</h4>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Dependente</p>
+                
+                <div className="grid grid-cols-2 gap-y-3 gap-x-4 mt-4 text-xs font-semibold text-slate-600">
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">CPF</p>
+                    <p className="text-slate-800 font-bold mt-0.5">{dep.cpf}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Nascimento</p>
+                    <p className="text-slate-800 font-bold mt-0.5">
+                      {new Date(dep.data_nascimento).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Plano</p>
+                    <p className="text-slate-800 font-bold mt-0.5">
+                      {dep.plano_empresa ? `${dep.plano_empresa} - ${dep.plano_nome} (${dep.plano_numero_carteirinha})` : 'Sem plano associado'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal Criar Dependente */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/60" onClick={() => setShowAddModal(false)} />
+          <div className="bg-white rounded-[2rem] w-full max-w-xl p-6 md:p-8 relative z-10 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <h3 className="text-lg font-black text-slate-800 mb-6">Cadastrar Dependente</h3>
+            
+            {error && <div className="bg-red-50 text-red-600 p-3 rounded-xl text-xs font-bold mb-4">{error}</div>}
+            {success && <div className="bg-emerald-50 text-emerald-600 p-3 rounded-xl text-xs font-bold mb-4">{success}</div>}
+
+            <form onSubmit={handleAddDependent} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Nome Completo</label>
+                  <input
+                    type="text" required
+                    value={form.nome}
+                    onChange={e => setForm({...form, nome: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">CPF</label>
+                  <input
+                    type="text" required placeholder="000.000.000-00"
+                    value={form.cpf}
+                    onChange={e => setForm({...form, cpf: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Data de Nascimento</label>
+                  <input
+                    type="date" required
+                    value={form.data_nascimento}
+                    onChange={e => setForm({...form, data_nascimento: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Endereço Completo</label>
+                  <input
+                    type="text" required
+                    value={form.endereco}
+                    onChange={e => setForm({...form, endereco: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <h4 className="text-xs font-black text-slate-700 mt-2 border-b border-slate-100 pb-2">Plano de Saúde (Opcional)</h4>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Operadora / Empresa</label>
+                  <input
+                    type="text"
+                    value={form.plano_empresa}
+                    onChange={e => setForm({...form, plano_empresa: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Plano</label>
+                  <input
+                    type="text"
+                    value={form.plano_nome}
+                    onChange={e => setForm({...form, plano_nome: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Produto</label>
+                  <input
+                    type="text"
+                    value={form.plano_produto}
+                    onChange={e => setForm({...form, plano_produto: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Carteirinha</label>
+                  <input
+                    type="text"
+                    value={form.plano_numero_carteirinha}
+                    onChange={e => setForm({...form, plano_numero_carteirinha: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-600 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-primary-600/10 transition-colors"
+                >
+                  Salvar Dependente
+                  </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
