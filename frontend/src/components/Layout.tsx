@@ -5,7 +5,6 @@ import {
   Users,
   Building2,
   Stethoscope,
-  ShieldAlert,
   ClipboardList,
   ChevronDown,
   LogOut,

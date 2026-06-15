@@ -13,11 +13,18 @@ const getDependentsByClient = async (req, res) => {
 
 const addDependent = async (req, res) => {
   const { clientId } = req.params;
-  const {
+  let {
     nome,
     cpf,
     data_nascimento,
     endereco,
+    cep,
+    logradouro,
+    numero,
+    complemento,
+    bairro,
+    cidade,
+    estado,
     email,
     celular,
     plano_empresa,
@@ -26,6 +33,10 @@ const addDependent = async (req, res) => {
     plano_numero_carteirinha,
     senha // opcional para login do dependente
   } = req.body;
+
+  if (!endereco && logradouro && numero && cidade && estado && cep) {
+    endereco = `${logradouro}, ${numero}${complemento ? ' - ' + complemento : ''}, ${bairro ? bairro + ', ' : ''}${cidade} - ${estado}, CEP: ${cep}`;
+  }
 
   if (!nome || !cpf || !data_nascimento || !endereco) {
     return res.status(400).json({ error: 'Nome, CPF, Data de Nascimento e Endereço são obrigatórios' });

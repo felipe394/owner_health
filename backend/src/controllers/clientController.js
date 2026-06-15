@@ -1,5 +1,6 @@
 const dbHelper = require('../utils/dbHelper');
 const bcrypt = require('bcryptjs');
+const { sendFirstAccessEmail } = require('../utils/mailer');
 
 const getClients = async (req, res) => {
   try {
@@ -30,11 +31,18 @@ const getClientById = async (req, res) => {
 };
 
 const registerClient = async (req, res) => {
-  const {
+  let {
     nome,
     cpf,
     data_nascimento,
     endereco,
+    cep,
+    logradouro,
+    numero,
+    complemento,
+    bairro,
+    cidade,
+    estado,
     email,
     celular,
     plano_empresa,
@@ -44,6 +52,10 @@ const registerClient = async (req, res) => {
     senha,
     acceptLGPD
   } = req.body;
+
+  if (!endereco && logradouro && numero && estado && cep) {
+    endereco = `${logradouro}, ${numero}${complemento ? ' - ' + complemento : ''}${bairro ? ', ' + bairro : ''}${cidade ? ', ' + cidade : ''} - ${estado}, CEP: ${cep}`;
+  }
 
   if (!nome || !cpf || !data_nascimento || !endereco || !email || !senha) {
     return res.status(400).json({ error: 'Todos os campos obrigatórios devem ser preenchidos' });
@@ -102,6 +114,8 @@ const registerClient = async (req, res) => {
       plano_produto,
       plano_numero_carteirinha,
       plano_tipo: 'free',
+      status: 'ativo',
+      pagamento_status: 'pago',
       lgpd_aceito: true,
       lgpd_aceito_em: new Date()
     });
@@ -111,6 +125,15 @@ const registerClient = async (req, res) => {
       usuario_id: userId,
       aceito_em: new Date(),
       versao_termos: '1.0'
+    });
+
+    // Enviar e-mail de primeiro acesso
+    await sendFirstAccessEmail({
+      to: email,
+      nome,
+      email,
+      senha,
+      perfil: 'Cliente'
     });
 
     return res.status(201).json({
@@ -126,7 +149,27 @@ const registerClient = async (req, res) => {
 
 const updateClient = async (req, res) => {
   const { id } = req.params;
-  const { nome, data_nascimento, endereco, celular, plano_empresa, plano_nome, plano_produto, plano_numero_carteirinha } = req.body;
+  let {
+    nome,
+    data_nascimento,
+    endereco,
+    cep,
+    logradouro,
+    numero,
+    complemento,
+    bairro,
+    cidade,
+    estado,
+    celular,
+    plano_empresa,
+    plano_nome,
+    plano_produto,
+    plano_numero_carteirinha
+  } = req.body;
+
+  if (!endereco && logradouro && numero && cidade && estado && cep) {
+    endereco = `${logradouro}, ${numero}${complemento ? ' - ' + complemento : ''}, ${bairro ? bairro + ', ' : ''}${cidade} - ${estado}, CEP: ${cep}`;
+  }
 
   try {
     const clients = await dbHelper.query('clientes', 'select', { id: parseInt(id) });
@@ -151,9 +194,47 @@ const updateClient = async (req, res) => {
   }
 };
 
+const toggleClientStatus = async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // 'ativo' ou 'inativo'
+
+  try {
+    const clients = await dbHelper.query('clientes', 'select', { id: parseInt(id) });
+    if (clients.length === 0) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+
+    await dbHelper.query('clientes', 'update', { id: parseInt(id) }, { status });
+    return res.json({ message: `Status do cliente atualizado para ${status} com sucesso!` });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Erro ao alterar status do cliente' });
+  }
+};
+
+const updateClientPayment = async (req, res) => {
+  const { id } = req.params;
+  const { pagamento_status } = req.body; // 'pago' ou 'pendente'
+
+  try {
+    const clients = await dbHelper.query('clientes', 'select', { id: parseInt(id) });
+    if (clients.length === 0) {
+      return res.status(404).json({ error: 'Cliente não encontrado' });
+    }
+
+    await dbHelper.query('clientes', 'update', { id: parseInt(id) }, { pagamento_status });
+    return res.json({ message: `Status de pagamento atualizado para ${pagamento_status} com sucesso!` });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Erro ao atualizar status de pagamento do cliente' });
+  }
+};
+
 module.exports = {
   getClients,
   getClientById,
   registerClient,
-  updateClient
+  updateClient,
+  toggleClientStatus,
+  updateClientPayment
 };

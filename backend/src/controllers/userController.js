@@ -11,16 +11,27 @@ const getUsers = async (req, res) => {
 };
 
 const registerSystemUser = async (req, res) => {
-  const {
+  let {
     nome,
     cpf,
     data_nascimento,
     endereco,
+    cep,
+    logradouro,
+    numero,
+    complemento,
+    bairro,
+    cidade,
+    estado,
     email,
     celular,
     senha,
     is_admin // Permite definir se é Admin ou Usuário Comum
   } = req.body;
+
+  if (!endereco && logradouro && numero && cidade && estado && cep) {
+    endereco = `${logradouro}, ${numero}${complemento ? ' - ' + complemento : ''}, ${bairro ? bairro + ', ' : ''}${cidade} - ${estado}, CEP: ${cep}`;
+  }
 
   if (!nome || !cpf || !data_nascimento || !endereco || !email || !senha) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios' });

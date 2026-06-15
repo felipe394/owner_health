@@ -173,8 +173,8 @@ export const Login = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-11 pr-4 py-3.5 focus:outline-none focus:ring-2 focus:bg-white transition-all font-medium placeholder:text-slate-400 text-sm"
-                  style={{ '--tw-ring-color': '#0d9488' } as React.CSSProperties}
-                  onFocus={e => e.currentTarget.style.borderColor = '#0d9488'}
+                  style={{ '--tw-ring-color': '#1d4ed8' } as React.CSSProperties}
+                  onFocus={e => e.currentTarget.style.borderColor = '#1d4ed8'}
                   onBlur={e => e.currentTarget.style.borderColor = ''}
                   placeholder="seu@email.com"
                   autoComplete="email"
@@ -196,7 +196,8 @@ export const Login = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded-xl pl-11 pr-12 py-3.5 focus:outline-none focus:ring-2 focus:bg-white transition-all font-medium placeholder:text-slate-400 text-sm"
-                  onFocus={e => e.currentTarget.style.borderColor = '#0d9488'}
+                  style={{ '--tw-ring-color': '#1d4ed8' } as React.CSSProperties}
+                  onFocus={e => e.currentTarget.style.borderColor = '#1d4ed8'}
                   onBlur={e => e.currentTarget.style.borderColor = ''}
                   placeholder="sua senha"
                   autoComplete="current-password"
@@ -233,7 +234,7 @@ export const Login = () => {
               </label>
               <button
                 type="button"
-                onClick={() => alert('Recuperação de senha em desenvolvimento.')}
+                onClick={() => navigate('/forgot-password')}
                 className="text-sm font-bold transition-colors hover:underline"
                 style={{ color: '#2563eb' }}
               >

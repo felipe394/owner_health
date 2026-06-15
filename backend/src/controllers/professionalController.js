@@ -1,5 +1,6 @@
 const dbHelper = require('../utils/dbHelper');
 const bcrypt = require('bcryptjs');
+const { sendFirstAccessEmail } = require('../utils/mailer');
 
 const getProfessionals = async (req, res) => {
   const { companyId } = req.query;
@@ -69,18 +70,57 @@ const getProfessionalById = async (req, res) => {
   }
 };
 
+const toggleProfessionalAccess = async (req, res) => {
+  const { id } = req.params;
+  const { ativo } = req.body;
+
+  try {
+    const professionals = await dbHelper.query('profissionais', 'select', { id: parseInt(id) });
+    if (professionals.length === 0) {
+      return res.status(404).json({ error: 'Profissional não encontrado' });
+    }
+
+    await dbHelper.query('profissionais', 'update', { id: parseInt(id) }, { ativo: !!ativo });
+
+    // Também bloqueia ou desbloqueia o usuário correspondente
+    const professional = professionals[0];
+    if (professional.usuario_id) {
+      await dbHelper.query('usuarios', 'update', { id: professional.usuario_id }, { ativo: !!ativo });
+    }
+
+    return res.json({
+      message: ativo ? 'Acesso do profissional ativado com sucesso!' : 'Acesso do profissional suspenso com sucesso!'
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Erro ao atualizar status do profissional' });
+  }
+};
+
 const registerProfessional = async (req, res) => {
-  const {
+  let {
     nome,
     cpf,
     data_nascimento,
     endereco,
+    cep,
+    logradouro,
+    numero,
+    complemento,
+    bairro,
+    cidade,
+    estado,
     numero_conselho,
+    tipo_profissional, // médico, fisioterapeuta, nutricionista, psicólogo, fonoaudiólogo, terapeuta
     email,
     celular,
     senha,
     company_id // opcional: se cadastrado a partir de uma clínica/hospital
   } = req.body;
+
+  if (!endereco && logradouro && numero && estado && cep) {
+    endereco = `${logradouro}, ${numero}${complemento ? ' - ' + complemento : ''}${bairro ? ', ' + bairro : ''}${cidade ? ', ' + cidade : ''} - ${estado}, CEP: ${cep}`;
+  }
 
   if (!nome || !cpf || !data_nascimento || !endereco || !numero_conselho || !email || !senha) {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios' });
@@ -114,8 +154,10 @@ const registerProfessional = async (req, res) => {
       data_nascimento,
       endereco,
       numero_conselho,
+      tipo_profissional: tipo_profissional || null,
       email,
-      celular
+      celular,
+      ativo: true
     });
 
     // Se houver vínculo inicial com uma clínica/hospital
@@ -125,6 +167,15 @@ const registerProfessional = async (req, res) => {
         empresa_id: parseInt(company_id)
       });
     }
+
+    // Enviar e-mail de primeiro acesso
+    await sendFirstAccessEmail({
+      to: email,
+      nome,
+      email,
+      senha,
+      perfil: 'Profissional de Saúde'
+    });
 
     return res.status(201).json({
       message: 'Profissional de saúde cadastrado com sucesso!',
@@ -215,6 +266,7 @@ module.exports = {
   getProfessionals,
   getProfessionalById,
   registerProfessional,
+  toggleProfessionalAccess,
   linkToCompany,
   unlinkFromCompany,
   addProfessionalHealthPlan,

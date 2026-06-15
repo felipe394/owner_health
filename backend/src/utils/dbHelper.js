@@ -25,6 +25,8 @@ const memoryDb = {
       plano_produto: 'Apartamento',
       plano_numero_carteirinha: '1234567890120',
       plano_tipo: 'free',
+      status: 'ativo',
+      pagamento_status: 'pago',
       lgpd_aceito: true,
       lgpd_aceito_em: new Date().toISOString()
     }
@@ -98,22 +100,32 @@ async function query(table, action, ...args) {
   try {
     // Tenta banco real
     if (action === 'select') {
+      const filter = args[0];
+      if (filter && typeof filter === 'object' && !Array.isArray(filter)) {
+        return await db(table).where(filter).select();
+      }
       return await db(table).select(...args);
     }
     if (action === 'insert') {
       return await db(table).insert(...args);
     }
     if (action === 'update') {
-      const [id, data] = args;
-      return await db(table).where({ id }).update(data);
+      const [filter, data] = args;
+      if (filter && typeof filter === 'object' && !Array.isArray(filter)) {
+        return await db(table).where(filter).update(data);
+      }
+      return await db(table).where({ id: filter }).update(data);
     }
     if (action === 'delete') {
-      const [id] = args;
-      return await db(table).where({ id }).delete();
+      const [filter] = args;
+      if (filter && typeof filter === 'object' && !Array.isArray(filter)) {
+        return await db(table).where(filter).delete();
+      }
+      return await db(table).where({ id: filter }).delete();
     }
   } catch (error) {
     // Fallback em memória
-    console.log(`[MemoryDB Fallback] Ação '${action}' na tabela '${table}'`);
+    console.log(`[MemoryDB Fallback] Ação '${action}' na tabela '${table}':`, error.message);
     
     if (action === 'select') {
       let results = [...memoryDb[table]];

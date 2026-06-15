@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Plus, Trash2, Mail, Lock, User, Calendar, MapPin, Phone } from 'lucide-react';
+import { UserCheck, Plus, Trash2, Mail, Lock, User, Calendar, MapPin, Phone, Hash, Loader2 } from 'lucide-react';
 import { API_URL } from '../../config';
 
 export const UserList: React.FC = () => {
@@ -12,9 +12,31 @@ export const UserList: React.FC = () => {
   const token = localStorage.getItem('token');
 
   const [form, setForm] = useState({
-    nome: '', cpf: '', data_nascimento: '', endereco: '', email: '', celular: '',
-    senha: '', is_admin: true
+    nome: '', cpf: '', data_nascimento: '',
+    cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
+    email: '', celular: '', senha: '', is_admin: true
   });
+  const [cepLoading, setCepLoading] = useState(false);
+
+  const handleCepBlur = async () => {
+    const cep = form.cep.replace(/\D/g, '');
+    if (cep.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        setForm(prev => ({
+          ...prev,
+          logradouro: data.logradouro || prev.logradouro,
+          bairro: data.bairro || prev.bairro,
+          cidade: data.localidade || prev.cidade,
+          estado: data.uf || prev.estado
+        }));
+      }
+    } catch {}
+    finally { setCepLoading(false); }
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -56,8 +78,9 @@ export const UserList: React.FC = () => {
 
       setSuccess('Usuário cadastrado com sucesso!');
       setForm({
-        nome: '', cpf: '', data_nascimento: '', endereco: '', email: '', celular: '',
-        senha: '', is_admin: true
+        nome: '', cpf: '', data_nascimento: '',
+        cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
+        email: '', celular: '', senha: '', is_admin: true
       });
       fetchUsers();
       setTimeout(() => setShowAddModal(false), 1500);
@@ -215,19 +238,65 @@ export const UserList: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="col-span-2 border-b border-slate-100 pb-1.5 mt-2">
+                  <h4 className="text-xs font-black text-slate-700">Endereço</h4>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">CEP</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                      {cepLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MapPin className="w-4 h-4" />}
+                    </span>
+                    <input type="text" required placeholder="00000-000"
+                      value={form.cep}
+                      onChange={e => setForm({...form, cep: e.target.value.replace(/\D/g,'').replace(/(\d{5})(\d)/,'$1-$2').slice(0,9)})}
+                      onBlur={handleCepBlur} maxLength={9}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Número</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                      <Hash className="w-4 h-4" />
+                    </span>
+                    <input type="text" required placeholder="Ex: 123"
+                      value={form.numero}
+                      onChange={e => setForm({...form, numero: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none"
+                    />
+                  </div>
+                </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Endereço Completo</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Logradouro</label>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
                       <MapPin className="w-4 h-4" />
                     </span>
-                    <input
-                      type="text" required
-                      value={form.endereco}
-                      onChange={e => setForm({...form, endereco: e.target.value})}
+                    <input type="text" required placeholder="Rua, Avenida..."
+                      value={form.logradouro}
+                      onChange={e => setForm({...form, logradouro: e.target.value})}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none"
                     />
                   </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label>
+                  <input type="text" required placeholder="Ex: SP"
+                    value={form.estado}
+                    onChange={e => setForm({...form, estado: e.target.value.toUpperCase().slice(0,2)})}
+                    maxLength={2}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Complemento <span className="text-slate-400 font-normal">(opcional)</span></label>
+                  <input type="text" placeholder="Apto, Sala..."
+                    value={form.complemento}
+                    onChange={e => setForm({...form, complemento: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none"
+                  />
                 </div>
 
                 <div className="col-span-2 border-t border-slate-100 pt-4 mt-2">

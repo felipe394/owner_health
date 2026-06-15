@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../../knexfile');
+const dbHelper = require('../utils/dbHelper');
 
 // Mock para facilitar o desenvolvimento enquanto o banco de dados não estiver criado/configurado (Português)
 const mockUsers = [
@@ -110,6 +111,53 @@ const authenticate = async (req, res) => {
       return res.status(403).json({ error: 'Nenhum perfil ativo associado a este usuário' });
     }
 
+    // Se for cliente ou dependente, precisamos validar o status e pagamento do cliente titular
+    let titularClient = null;
+    let profiles = [];
+
+    if (roles.includes('client')) {
+      const clients = await dbHelper.query('clientes', 'select', { usuario_id: user.id });
+      if (clients.length > 0) {
+        titularClient = clients[0];
+      }
+    } else if (roles.includes('dependent')) {
+      const dependents = await dbHelper.query('dependentes', 'select', { usuario_id: user.id });
+      if (dependents.length > 0) {
+        const dependent = dependents[0];
+        const clients = await dbHelper.query('clientes', 'select', { id: dependent.cliente_id });
+        if (clients.length > 0) {
+          titularClient = clients[0];
+        }
+      }
+    }
+
+    if (titularClient) {
+      if (titularClient.status && titularClient.status !== 'ativo') {
+        return res.status(403).json({ error: 'Assinatura inativa. Entre em contato com a administração.' });
+      }
+      if (titularClient.pagamento_status && titularClient.pagamento_status !== 'pago') {
+        return res.status(403).json({ error: 'Pendência financeira detectada. Regularize o pagamento para acessar.' });
+      }
+
+      // Buscar todos os perfis da assinatura
+      profiles.push({
+        id: titularClient.id,
+        nome: titularClient.nome,
+        role: 'client',
+        avatar_color: '#3b82f6'
+      });
+
+      const dependents = await dbHelper.query('dependentes', 'select', { cliente_id: titularClient.id });
+      dependents.forEach(dep => {
+        profiles.push({
+          id: dep.id,
+          nome: dep.nome,
+          role: 'dependent',
+          avatar_color: '#0d9488'
+        });
+      });
+    }
+
     const token = jwt.sign(
       { 
         id: user.id, 
@@ -128,6 +176,7 @@ const authenticate = async (req, res) => {
         name: user.nome || user.email,
         email: user.email,
         roles,
+        profiles
       },
     });
   } catch (err) {
@@ -136,4 +185,203 @@ const authenticate = async (req, res) => {
   }
 };
 
-module.exports = { authenticate };
+const nodemailer = require('nodemailer');
+
+const forgotPassword = async (req, res) => {
+  const { email } = req.body || {};
+
+  if (!email) {
+    return res.status(400).json({ error: 'E-mail é obrigatório' });
+  }
+
+  try {
+    let user = null;
+    let dbUsed = false;
+
+    // 1. Procurar usuário no banco
+    try {
+      user = await db('usuarios').where({ email }).first();
+      if (user) dbUsed = true;
+    } catch (err) {
+      console.warn('⚠️ Erro ao buscar usuário no banco, usando Mock.');
+    }
+
+    // 2. Se não encontrar no banco, procurar no mock
+    if (!user) {
+      user = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: 'E-mail não cadastrado.' });
+    }
+
+    // 3. Buscar nome do usuário para personalizar o email
+    let nomeUsuario = user.nome || 'Usuário';
+
+    if (dbUsed) {
+      try {
+        const sysUser = await dbHelper.query('usuarios_sistema', 'select', { usuario_id: user.id });
+        if (sysUser.length > 0) {
+          nomeUsuario = sysUser[0].nome;
+        } else {
+          const client = await dbHelper.query('clientes', 'select', { usuario_id: user.id });
+          if (client.length > 0) {
+            nomeUsuario = client[0].nome;
+          } else {
+            const company = await dbHelper.query('empresas', 'select', { usuario_id: user.id });
+            if (company.length > 0) {
+              nomeUsuario = company[0].nome_fantasia || company[0].razao_social;
+            } else {
+              const prof = await dbHelper.query('profissionais', 'select', { usuario_id: user.id });
+              if (prof.length > 0) {
+                nomeUsuario = prof[0].nome;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao buscar nome detalhado do usuário:', err.message);
+      }
+    }
+
+    // 4. Gerar Token de recuperação (expira em 1 hora)
+    const token = jwt.sign(
+      { userId: user.id, email: user.email },
+      process.env.JWT_SECRET || 'owner_health_secret',
+      { expiresIn: '1h' }
+    );
+
+    // 5. Configurar Nodemailer
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: false, // true para port 465, false para outras portas como 587
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+
+    const resetLink = `http://localhost:5173/reset-password?token=${token}`;
+
+    const mailOptions = {
+      from: `Owner Health <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+      to: user.email,
+      subject: 'Recuperação de Senha - Owner Health',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #ffffff;">
+          <h2 style="color: #2563eb; text-align: center; margin-bottom: 20px;">Owner Health</h2>
+          <p style="font-size: 16px; color: #334155; line-height: 1.5;">Olá <strong>${nomeUsuario}</strong>,</p>
+          <p style="font-size: 16px; color: #334155; line-height: 1.5;">Recebemos uma solicitação de recuperação de senha para a sua conta no Owner Health.</p>
+          <p style="font-size: 16px; color: #334155; line-height: 1.5;">Clique no botão abaixo para cadastrar uma nova senha:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetLink}" style="background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 16px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">Cadastrar Nova Senha</a>
+          </div>
+          <p style="font-size: 13px; color: #64748b; line-height: 1.5;">Se o botão não funcionar, você também pode copiar e colar o link abaixo no seu navegador:</p>
+          <p style="font-size: 13px; color: #2563eb; word-break: break-all; line-height: 1.5;">${resetLink}</p>
+          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 25px 0;">
+          <p style="font-size: 12px; color: #94a3b8; text-align: center; line-height: 1.5;">Se você não solicitou essa alteração, desconsidere este e-mail.</p>
+          <p style="font-size: 12px; color: #94a3b8; text-align: center; line-height: 1.5;">Atenciosamente,<br>Equipe Owner Health</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✉️ E-mail de recuperação enviado com sucesso para: ${user.email}`);
+
+    return res.json({ message: 'E-mail de recuperação enviado com sucesso!' });
+  } catch (err) {
+    console.error('Erro no envio de e-mail de recuperação:', err);
+    return res.status(500).json({ error: 'Erro ao enviar e-mail de recuperação. Tente novamente mais tarde.' });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  const { token, senha, confirmarSenha } = req.body || {};
+
+  if (!token || !senha || !confirmarSenha) {
+    return res.status(400).json({ error: 'Todos os campos são obrigatórios' });
+  }
+
+  if (senha !== confirmarSenha) {
+    return res.status(400).json({ error: 'As senhas não coincidem' });
+  }
+
+  try {
+    // 1. Verificar Token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'owner_health_secret');
+    } catch (err) {
+      return res.status(400).json({ error: 'Token inválido ou expirado.' });
+    }
+
+    const { userId, email } = decoded;
+
+    let user = null;
+    let dbUsed = false;
+
+    // 2. Procurar usuário
+    try {
+      user = await db('usuarios').where({ id: userId }).first();
+      if (user) dbUsed = true;
+    } catch (err) {
+      console.warn('⚠️ Erro ao buscar usuário no banco, usando Mock.');
+    }
+
+    if (!user) {
+      // Tentar mock
+      user = mockUsers.find(u => u.id === userId || u.email.toLowerCase() === email.toLowerCase());
+    }
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
+    }
+
+    // 3. Validar se a senha não é igual à anterior
+    let isSamePassword = false;
+    if (dbUsed && user.senha) {
+      isSamePassword = await bcrypt.compare(senha, user.senha);
+    } else if (user.passwordHash) {
+      isSamePassword = await bcrypt.compare(senha, user.passwordHash);
+    } else {
+      // Mock sem senha cadastrada
+      isSamePassword = senha === '123456';
+    }
+
+    if (isSamePassword) {
+      return res.status(400).json({ error: 'A nova senha não pode ser igual à senha anterior.' });
+    }
+
+    // 4. Hash da nova senha
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(senha, salt);
+
+    // 5. Salvar nova senha
+    if (dbUsed) {
+      await db('usuarios').where({ id: user.id }).update({ senha: passwordHash });
+    } else {
+      // Atualizar no mock
+      const mockIndex = mockUsers.findIndex(u => u.id === user.id);
+      if (mockIndex !== -1) {
+        mockUsers[mockIndex].passwordHash = passwordHash;
+      }
+      // Também na tabela do helper
+      const memIndex = dbHelper.memoryDb.usuarios.findIndex(u => u.id === user.id);
+      if (memIndex !== -1) {
+        dbHelper.memoryDb.usuarios[memIndex].senha = passwordHash;
+      }
+    }
+
+    return res.json({ message: 'Senha alterada com sucesso!' });
+  } catch (err) {
+    console.error('Erro ao redefinir senha:', err);
+    return res.status(500).json({ error: 'Erro interno ao redefinir a senha.' });
+  }
+};
+
+module.exports = { authenticate, forgotPassword, resetPassword };
+

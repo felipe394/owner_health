@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Login } from './pages/Login';
 import { RegisterChoice } from './pages/Register/RegisterChoice';
@@ -14,20 +14,56 @@ import { DependentList } from './pages/Dependents/DependentList';
 import { Layout } from './components/Layout';
 import { PrivateRoute } from './components/PrivateRoute';
 
+// Novas importações do Portal de Clientes
+import { ClientLogin } from './pages/Client/ClientLogin';
+import { ClientProfiles } from './pages/Client/ClientProfiles';
+import { ClientLayout } from './components/ClientLayout';
+import { ClientDashboard } from './pages/Client/ClientDashboard';
+import { ClientProfile } from './pages/Client/ClientProfile';
+import { ClientDependents } from './pages/Client/ClientDependents';
+
+// Importações de Recuperação de Senha
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
+
 function App() {
   return (
     <Router>
       <Routes>
-        {/* Rotas Públicas */}
+        {/* Rotas Públicas Gerais */}
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/register" element={<RegisterChoice />} />
         <Route path="/register/client" element={<RegisterClient />} />
         <Route path="/register/company" element={<RegisterCompany />} />
 
-        {/* Rotas Protegidas (Autenticadas) */}
+        {/* Rotas do Portal de Clientes (Públicas e Protegidas) */}
+        <Route path="/client/login" element={<ClientLogin />} />
+        
+        <Route path="/client/profiles" element={
+          <PrivateRoute redirectTo="/client/login">
+            <ClientProfiles />
+          </PrivateRoute>
+        } />
+
+        <Route path="/client/*" element={
+          <PrivateRoute redirectTo="/client/login">
+            <ClientLayout>
+              <Routes>
+                <Route path="/dashboard" element={<ClientDashboard />} />
+                <Route path="/profile" element={<ClientProfile />} />
+                <Route path="/dependents" element={<ClientDependents />} />
+                <Route path="*" element={<Navigate to="/client/dashboard" replace />} />
+              </Routes>
+            </ClientLayout>
+          </PrivateRoute>
+        } />
+
+        {/* Rotas Protegidas do Portal Administrativo (Geral) */}
         <Route path="/*" element={
-          <PrivateRoute>
+          <PrivateRoute redirectTo="/login">
             <Layout>
               <Routes>
                 <Route path="/dashboard" element={<Dashboard />} />

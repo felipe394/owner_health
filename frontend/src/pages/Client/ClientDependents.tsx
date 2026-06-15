@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Plus, Trash2 } from 'lucide-react';
 import { API_URL } from '../../config';
 
-export const DependentList: React.FC = () => {
+export const ClientDependents: React.FC = () => {
   const [dependents, setDependents] = useState<any[]>([]);
   const [clientData, setClientData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -11,8 +11,9 @@ export const DependentList: React.FC = () => {
   const [success, setSuccess] = useState('');
 
   const token = localStorage.getItem('token');
-  const userRaw = localStorage.getItem('user');
-  const user = userRaw ? JSON.parse(userRaw) : { email: '' };
+  const activeProfileId = localStorage.getItem('activeProfileId');
+  const activeProfileRole = localStorage.getItem('activeProfileRole');
+
 
   const [form, setForm] = useState({
     nome: '', cpf: '', data_nascimento: '',
@@ -44,20 +45,38 @@ export const DependentList: React.FC = () => {
 
   useEffect(() => {
     fetchClientAndDependents();
-  }, []);
+  }, [activeProfileId, activeProfileRole]);
 
   const fetchClientAndDependents = async () => {
+    setLoading(true);
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
       const res = await fetch(`${API_URL}/api/clients`, { headers });
       const clients = await res.json();
+      
       if (Array.isArray(clients)) {
-        const currentClient = clients.find(c => c.email.toLowerCase() === user.email.toLowerCase());
-        if (currentClient) {
-          setClientData(currentClient);
-          const resD = await fetch(`${API_URL}/api/dependents/client/${currentClient.id}`, { headers });
-          const deps = await resD.json();
-          setDependents(Array.isArray(deps) ? deps : []);
+        if (activeProfileRole === 'client') {
+          const currentClient = clients.find(c => String(c.id) === String(activeProfileId));
+          if (currentClient) {
+            setClientData(currentClient);
+            const resD = await fetch(`${API_URL}/api/dependents/client/${currentClient.id}`, { headers });
+            const deps = await resD.json();
+            setDependents(Array.isArray(deps) ? deps : []);
+          }
+        } else {
+          // É dependente
+          let foundParent = null;
+          for (const client of clients) {
+            const resD = await fetch(`${API_URL}/api/dependents/client/${client.id}`, { headers });
+            const deps = await resD.json();
+            const hasMe = Array.isArray(deps) ? deps.some(d => String(d.id) === String(activeProfileId)) : false;
+            if (hasMe) {
+              foundParent = client;
+              setDependents(deps);
+              break;
+            }
+          }
+          setClientData(foundParent);
         }
       }
     } catch (err) {
@@ -69,6 +88,8 @@ export const DependentList: React.FC = () => {
 
   const handleAddDependent = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (activeProfileRole !== 'client') return; // Segurança
+
     setError('');
     setSuccess('');
 
@@ -102,6 +123,7 @@ export const DependentList: React.FC = () => {
   };
 
   const handleDelete = async (id: number) => {
+    if (activeProfileRole !== 'client') return; // Segurança
     if (!confirm('Deseja realmente remover este dependente?')) return;
     try {
       const response = await fetch(`${API_URL}/api/dependents/${id}`, {
@@ -119,48 +141,54 @@ export const DependentList: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-600"></div>
       </div>
     );
   }
 
+  const isEditable = activeProfileRole === 'client';
+
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6 animate-fadeIn">
+      <div className="flex items-center justify-between border-b border-slate-100 pb-4">
         <div>
-          <h2 className="text-xl font-black text-slate-800">Meus Dependentes</h2>
-          <p className="text-xs text-slate-500 font-medium">Gerencie o círculo familiar vinculado à sua conta Free (Máximo 2)</p>
+          <h2 className="text-xl font-black text-slate-800">Círculo Familiar</h2>
+          <p className="text-xs text-slate-500 font-medium">Dependentes vinculados à assinatura (Máximo 2 dependentes no Plano Free)</p>
         </div>
-        <button
-          onClick={() => {
-            if (dependents.length >= 2) {
-              alert('Limite de 2 dependentes excedido para o Plano Free.');
-              return;
-            }
-            setShowAddModal(true);
-          }}
-          className="flex items-center gap-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Novo Dependente ({dependents.length}/2)</span>
-        </button>
+        {isEditable && (
+          <button
+            onClick={() => {
+              if (dependents.length >= 2) {
+                alert('Limite de 2 dependentes excedido para o Plano Free.');
+                return;
+              }
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Adicionar Dependente ({dependents.length}/2)</span>
+          </button>
+        )}
       </div>
 
       {dependents.length === 0 ? (
-        <div className="text-center py-10 border border-dashed border-slate-100 rounded-2xl">
+        <div className="text-center py-12 border border-dashed border-slate-200 rounded-2xl">
           <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-          <p className="text-xs font-bold text-slate-500">Nenhum dependente cadastrado.</p>
+          <p className="text-xs font-bold text-slate-500">Nenhum dependente cadastrado ainda.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {dependents.map(dep => (
             <div key={dep.id} className="border border-slate-100 bg-slate-50 rounded-2xl p-5 relative flex flex-col justify-between">
-              <button
-                onClick={() => handleDelete(dep.id)}
-                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-red-500 transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {isEditable && (
+                <button
+                  onClick={() => handleDelete(dep.id)}
+                  className="absolute top-4 right-4 p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg border border-transparent hover:border-slate-100 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
               
               <div>
                 <h4 className="text-sm font-bold text-slate-800">{dep.nome}</h4>
@@ -191,7 +219,7 @@ export const DependentList: React.FC = () => {
       )}
 
       {/* Modal Criar Dependente */}
-      {showAddModal && (
+      {showAddModal && isEditable && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-slate-900/60" onClick={() => setShowAddModal(false)} />
           <div className="bg-white rounded-[2rem] w-full max-w-xl p-6 md:p-8 relative z-10 max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -208,7 +236,7 @@ export const DependentList: React.FC = () => {
                     type="text" required
                     value={form.nome}
                     onChange={e => setForm({...form, nome: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -217,7 +245,7 @@ export const DependentList: React.FC = () => {
                     type="text" required placeholder="000.000.000-00"
                     value={form.cpf}
                     onChange={e => setForm({...form, cpf: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -226,7 +254,7 @@ export const DependentList: React.FC = () => {
                     type="date" required
                     value={form.data_nascimento}
                     onChange={e => setForm({...form, data_nascimento: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 <div className="col-span-2 border-b border-slate-100 pb-1.5 mt-2">
@@ -236,13 +264,13 @@ export const DependentList: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-600 mb-1">CEP</label>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
-                      {cepLoading ? <span className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin inline-block" /> : '📍'}
+                      {cepLoading ? <span className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin inline-block" /> : '📍'}
                     </span>
                     <input type="text" required placeholder="00000-000"
                       value={form.cep}
                       onChange={e => setForm({...form, cep: e.target.value.replace(/\D/g,'').replace(/(\d{5})(\d)/,'$1-$2').slice(0,9)})}
                       onBlur={handleCepBlur} maxLength={9}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
                 </div>
@@ -251,7 +279,7 @@ export const DependentList: React.FC = () => {
                   <input type="text" required placeholder="Ex: 123"
                     value={form.numero}
                     onChange={e => setForm({...form, numero: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 <div className="col-span-2">
@@ -259,7 +287,7 @@ export const DependentList: React.FC = () => {
                   <input type="text" required placeholder="Rua, Avenida..."
                     value={form.logradouro}
                     onChange={e => setForm({...form, logradouro: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -268,7 +296,7 @@ export const DependentList: React.FC = () => {
                     value={form.estado}
                     onChange={e => setForm({...form, estado: e.target.value.toUpperCase().slice(0,2)})}
                     maxLength={2}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 <div>
@@ -276,7 +304,7 @@ export const DependentList: React.FC = () => {
                   <input type="text" placeholder="Apto, Sala..."
                     value={form.complemento}
                     onChange={e => setForm({...form, complemento: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
                 <div className="col-span-2">
@@ -288,7 +316,7 @@ export const DependentList: React.FC = () => {
                     type="text"
                     value={form.plano_empresa}
                     onChange={e => setForm({...form, plano_empresa: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
                   />
                 </div>
                 <div>
@@ -297,7 +325,7 @@ export const DependentList: React.FC = () => {
                     type="text"
                     value={form.plano_nome}
                     onChange={e => setForm({...form, plano_nome: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
                   />
                 </div>
                 <div>
@@ -306,7 +334,7 @@ export const DependentList: React.FC = () => {
                     type="text"
                     value={form.plano_produto}
                     onChange={e => setForm({...form, plano_produto: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
                   />
                 </div>
                 <div>
@@ -315,7 +343,7 @@ export const DependentList: React.FC = () => {
                     type="text"
                     value={form.plano_numero_carteirinha}
                     onChange={e => setForm({...form, plano_numero_carteirinha: e.target.value})}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none"
                   />
                 </div>
               </div>
@@ -324,16 +352,16 @@ export const DependentList: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-600 transition-colors"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-600 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-primary-600/10 transition-colors"
+                  className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-blue-600/10 transition-colors cursor-pointer"
                 >
                   Salvar Dependente
-                  </button>
+                </button>
               </div>
             </form>
           </div>

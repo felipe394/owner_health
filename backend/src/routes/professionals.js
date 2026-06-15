@@ -4,6 +4,7 @@ const {
   getProfessionals,
   getProfessionalById,
   registerProfessional,
+  toggleProfessionalAccess,
   linkToCompany,
   unlinkFromCompany,
   addProfessionalHealthPlan,
@@ -18,6 +19,7 @@ router.get('/:id', getProfessionalById);
 router.post('/register', registerProfessional);
 router.post('/:id/link-company', linkToCompany);
 router.delete('/:id/unlink-company', unlinkFromCompany);
+router.put('/:id/toggle-access', toggleProfessionalAccess);
 router.post('/:id/health-plans', addProfessionalHealthPlan);
 router.delete('/health-plans/:relationId', removeProfessionalHealthPlan);
 

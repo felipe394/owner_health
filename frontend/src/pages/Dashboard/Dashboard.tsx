@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Users,
   Building2,
@@ -10,11 +11,26 @@ import {
   ShieldCheck,
   CreditCard,
   CheckCircle,
-  User
+  User,
+  Loader2,
+  Hash,
+  MapPin,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { API_URL } from '../../config';
 
+const maskCpf = (v: string) =>
+  v.replace(/\D/g, '')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+    .slice(0, 14);
+
+const validateCpf = (v: string) => v.replace(/\D/g, '').length === 11;
+
 export const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const userRaw = localStorage.getItem('user');
   const user = userRaw ? JSON.parse(userRaw) : { id: 0, name: 'Usuário', email: '', roles: ['client'] };
   const activeRole = localStorage.getItem('activeRole') || user.roles[0];
@@ -29,11 +45,47 @@ export const Dashboard: React.FC = () => {
   const [dependents, setDependents] = useState<any[]>([]);
   const [showDepModal, setShowDepModal] = useState(false);
   const [depForm, setDepForm] = useState({
-    nome: '', cpf: '', data_nascimento: '', endereco: '', email: '', celular: '',
+    nome: '', cpf: '', data_nascimento: '',
+    cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
+    email: '', celular: '',
     plano_empresa: '', plano_nome: '', plano_produto: '', plano_numero_carteirinha: '', senha: ''
   });
   const [depError, setDepError] = useState('');
   const [depSuccess, setDepSuccess] = useState('');
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState('');
+  const [cpfError, setCpfError] = useState('');
+  const [showDepSenha, setShowDepSenha] = useState(false);
+
+  const handleCepBlur = async () => {
+    const cep = depForm.cep.replace(/\D/g, '');
+    if (cep.length !== 8) {
+      setCepError('');
+      return;
+    }
+    setCepLoading(true);
+    setCepError('');
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await res.json();
+      if (data.erro) {
+        setCepError('CEP não encontrado. Verifique e tente novamente.');
+      } else {
+        setCepError('');
+        setDepForm(prev => ({
+          ...prev,
+          logradouro: data.logradouro || prev.logradouro,
+          bairro: data.bairro || prev.bairro,
+          cidade: data.localidade || prev.cidade,
+          estado: data.uf || prev.estado
+        }));
+      }
+    } catch {
+      setCepError('Não foi possível consultar o CEP. Verifique sua conexão.');
+    } finally {
+      setCepLoading(false);
+    }
+  };
 
   // Estados específicos de Empresa
   const [companyData, setCompanyData] = useState<any>(null);
@@ -123,6 +175,26 @@ export const Dashboard: React.FC = () => {
     setDepError('');
     setDepSuccess('');
 
+    if (!clientData || !clientData.id) {
+      setDepError('Erro: dados do cliente não carregados. Recarregue a página e tente novamente.');
+      return;
+    }
+
+    if (cpfError) {
+      setDepError('Corrija o CPF antes de continuar.');
+      return;
+    }
+    if (!validateCpf(depForm.cpf)) {
+      setCpfError('CPF inválido.');
+      setDepError('Corrija o CPF antes de continuar.');
+      return;
+    }
+
+    if (cepError) {
+      setDepError('Corrija o CEP antes de continuar.');
+      return;
+    }
+
     try {
       const response = await fetch(`${API_URL}/api/dependents/client/${clientData.id}`, {
         method: 'POST',
@@ -140,9 +212,14 @@ export const Dashboard: React.FC = () => {
 
       setDepSuccess('Dependente cadastrado com sucesso!');
       setDepForm({
-        nome: '', cpf: '', data_nascimento: '', endereco: '', email: '', celular: '',
+        nome: '', cpf: '', data_nascimento: '',
+        cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
+        email: '', celular: '',
         plano_empresa: '', plano_nome: '', plano_produto: '', plano_numero_carteirinha: '', senha: ''
       });
+      setCpfError('');
+      setCepError('');
+      setShowDepSenha(false);
       fetchDashboardData();
       setTimeout(() => setShowDepModal(false), 1500);
     } catch (err: any) {
@@ -255,6 +332,34 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* Ações Rápidas de Cadastro */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+          <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Ações Rápidas de Cadastro</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <button
+              onClick={() => navigate('/clients?add=true')}
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shadow-blue-600/10"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Cadastrar Novo Cliente</span>
+            </button>
+            <button
+              onClick={() => navigate('/companies?add=true')}
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shadow-indigo-600/10"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Cadastrar Nova Clínica</span>
+            </button>
+            <button
+              onClick={() => navigate('/professionals?add=true')}
+              className="flex items-center justify-center gap-2 px-4 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-md shadow-teal-600/10"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Cadastrar Novo Profissional</span>
+            </button>
+          </div>
+        </div>
+
         {/* Indicadores */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -357,6 +462,26 @@ export const Dashboard: React.FC = () => {
 
   // --- VIEW CLIENTE ---
   if (activeRole === 'client') {
+    // Nenhum perfil de cliente encontrado para este usuário
+    if (!clientData) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-6">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 max-w-md w-full text-center">
+            <div className="w-14 h-14 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center mx-auto mb-4">
+              <User className="w-7 h-7 text-amber-500" />
+            </div>
+            <h3 className="text-lg font-black text-slate-800 mb-2">Perfil de cliente não encontrado</h3>
+            <p className="text-xs text-slate-500 font-medium leading-relaxed">
+              O usuário <span className="font-bold text-slate-700">{user.email}</span> não possui um perfil de cliente cadastrado.
+            </p>
+            <p className="text-xs text-slate-400 font-medium leading-relaxed mt-2">
+              Para testar o painel de cliente, faça login diretamente com uma conta que possua um cadastro na área de clientes.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-blue-700 to-blue-900 text-white rounded-2xl p-6 md:p-8 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -546,9 +671,12 @@ export const Dashboard: React.FC = () => {
                     <input
                       type="text" required placeholder="000.000.000-00"
                       value={depForm.cpf}
-                      onChange={e => setDepForm({...depForm, cpf: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      onChange={e => { setDepForm({...depForm, cpf: maskCpf(e.target.value)}); setCpfError(''); }}
+                      onBlur={() => { if (depForm.cpf && !validateCpf(depForm.cpf)) setCpfError('CPF inválido. Informe os 11 dígitos.'); else setCpfError(''); }}
+                      maxLength={14}
+                      className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500 ${cpfError ? 'border-red-400' : 'border-slate-200'}`}
                     />
+                    {cpfError && <p className="text-red-500 text-[10px] font-bold mt-1">⚠ {cpfError}</p>}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-600 mb-1">Data de Nascimento</label>
@@ -559,13 +687,103 @@ export const Dashboard: React.FC = () => {
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
                   </div>
+                  {/* CEP */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">CEP</label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        {cepLoading ? <Loader2 className="w-4.5 h-4.5 animate-spin" /> : <MapPin className={`w-4.5 h-4.5 ${cepError ? 'text-red-400' : ''}`} />}
+                      </span>
+                      <input
+                        type="text" required placeholder="00000-000"
+                        value={depForm.cep}
+                        onChange={e => { setDepForm({...depForm, cep: e.target.value.replace(/\D/g,'').replace(/(\d{5})(\d)/,'$1-$2').slice(0,9)}); setCepError(''); }}
+                        onBlur={handleCepBlur}
+                        className={`w-full bg-slate-50 border rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 ${cepError ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 focus:ring-primary-500'}`}
+                        maxLength={9}
+                      />
+                    </div>
+                    {cepError && (
+                      <p className="text-red-500 text-[10px] font-bold mt-1.5 flex items-center gap-1">
+                        <span>⚠</span> {cepError}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Número */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Número</label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <Hash className="w-4 h-4" />
+                      </span>
+                      <input
+                        type="text" required placeholder="Ex: 123"
+                        value={depForm.numero}
+                        onChange={e => setDepForm({...depForm, numero: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Logradouro */}
                   <div className="col-span-2">
-                    <label className="block text-xs font-bold text-slate-600 mb-1">Endereço Completo</label>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Logradouro</label>
+                    <div className="relative">
+                      <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                        <MapPin className="w-4 h-4" />
+                      </span>
+                      <input
+                        type="text" required placeholder="Rua, Avenida..."
+                        value={depForm.logradouro}
+                        onChange={e => setDepForm({...depForm, logradouro: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bairro */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Bairro</label>
                     <input
-                      type="text" required
-                      value={depForm.endereco}
-                      onChange={e => setDepForm({...depForm, endereco: e.target.value})}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      type="text" required placeholder="Bairro"
+                      value={depForm.bairro}
+                      onChange={e => setDepForm({...depForm, bairro: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                  </div>
+
+                  {/* Cidade */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Cidade</label>
+                    <input
+                      type="text" required placeholder="Cidade"
+                      value={depForm.cidade}
+                      onChange={e => setDepForm({...depForm, cidade: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                  </div>
+
+                  {/* Estado */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Estado (UF)</label>
+                    <input
+                      type="text" required placeholder="Ex: SP"
+                      value={depForm.estado}
+                      onChange={e => setDepForm({...depForm, estado: e.target.value.toUpperCase().slice(0,2)})}
+                      maxLength={2}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                  </div>
+
+                  {/* Complemento */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">Complemento <span className="text-slate-400 font-normal">(opcional)</span></label>
+                    <input
+                      type="text" placeholder="Apto, Sala..."
+                      value={depForm.complemento}
+                      onChange={e => setDepForm({...depForm, complemento: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
                   </div>
                   <div className="col-span-2">
@@ -606,6 +824,41 @@ export const Dashboard: React.FC = () => {
                       onChange={e => setDepForm({...depForm, plano_numero_carteirinha: e.target.value})}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-medium"
                     />
+                  </div>
+                </div>
+
+                {/* Login do dependente (opcional) */}
+                <div className="col-span-2 border-t border-slate-100 pt-3 mt-2">
+                  <h4 className="text-xs font-black text-slate-700 mb-1">Acesso ao Portal <span className="text-slate-400 font-normal">(opcional)</span></h4>
+                  <p className="text-[10px] text-amber-600 font-semibold mb-3">Se preenchido, um e-mail com a senha temporária será enviado ao dependente.</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">E-mail do Dependente</label>
+                      <input
+                        type="email" placeholder="dependente@email.com"
+                        value={depForm.email}
+                        onChange={e => setDepForm({...depForm, email: e.target.value})}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-600 mb-1">Senha Temporária</label>
+                      <div className="relative">
+                        <input
+                          type={showDepSenha ? 'text' : 'password'} placeholder="senha temporária"
+                          value={depForm.senha}
+                          onChange={e => setDepForm({...depForm, senha: e.target.value})}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-3 pr-9 py-2 text-xs font-medium focus:outline-none focus:ring-1 focus:ring-primary-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowDepSenha(v => !v)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                        >
+                          {showDepSenha ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 

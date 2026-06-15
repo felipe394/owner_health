@@ -1,14 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, CreditCard } from 'lucide-react';
+import { Building2, CreditCard, Plus, X, User, Mail, Lock, Phone, Save } from 'lucide-react';
 import { API_URL } from '../../config';
 
 export const CompanyList: React.FC = () => {
   const [companies, setCompanies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [saving, setSaving] = useState(false);
+
   const token = localStorage.getItem('token');
+
+  // Form para novas empresas/clínicas
+  const [form, setForm] = useState({
+    razao_social: '',
+    nome_fantasia: '',
+    cnpj: '',
+    nome_responsavel: '',
+    cpf_responsavel: '',
+    cargo_responsavel: '',
+    email: '',
+    celular: '',
+    senha: ''
+  });
 
   useEffect(() => {
     fetchCompanies();
+    if (window.location.search.includes('add=true')) {
+      setShowAddModal(true);
+    }
   }, []);
 
   const fetchCompanies = async () => {
@@ -43,6 +64,46 @@ export const CompanyList: React.FC = () => {
     }
   };
 
+  const handleAddCompanySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setSaving(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/companies/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao cadastrar instituição');
+      }
+
+      setSuccess('Instituição de saúde cadastrada com sucesso!');
+      setForm({
+        razao_social: '',
+        nome_fantasia: '',
+        cnpj: '',
+        nome_responsavel: '',
+        cpf_responsavel: '',
+        cargo_responsavel: '',
+        email: '',
+        celular: '',
+        senha: ''
+      });
+
+      fetchCompanies();
+      setTimeout(() => setShowAddModal(false), 1500);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
@@ -52,10 +113,23 @@ export const CompanyList: React.FC = () => {
   }
 
   return (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-      <div>
-        <h2 className="text-xl font-black text-slate-800">Instituições de Saúde</h2>
-        <p className="text-xs text-slate-500 font-medium">Clínicas e Hospitais parceiros ativos</p>
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6 animate-fadeIn">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-slate-800">Instituições de Saúde</h2>
+          <p className="text-xs text-slate-500 font-medium">Clínicas e Hospitais parceiros ativos</p>
+        </div>
+        <button
+          onClick={() => {
+            setError('');
+            setSuccess('');
+            setShowAddModal(true);
+          }}
+          className="flex items-center gap-1.5 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Nova Instituição</span>
+        </button>
       </div>
 
       {companies.length === 0 ? (
@@ -99,7 +173,7 @@ export const CompanyList: React.FC = () => {
                   <td className="p-4 text-center">
                     <button
                       onClick={() => handleTogglePayment(company.id, company.pago)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-50 hover:bg-primary-50 hover:text-primary-600 rounded-lg border border-slate-200 hover:border-primary-100 text-slate-500 font-bold transition-all"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-primary-50 hover:text-primary-600 rounded-lg border border-slate-200 hover:border-primary-100 text-slate-500 font-bold transition-all cursor-pointer"
                     >
                       <CreditCard className="w-3.5 h-3.5" />
                       <span>{company.pago ? 'Marcar Pendente' : 'Marcar Pago'}</span>
@@ -109,6 +183,170 @@ export const CompanyList: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Modal Nova Instituição */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-slate-900/60" onClick={() => setShowAddModal(false)} />
+          <div className="bg-white rounded-[2rem] w-full max-w-2xl p-6 md:p-8 relative z-10 max-h-[90vh] overflow-y-auto shadow-2xl animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+              <h3 className="text-lg font-black text-slate-800">Cadastrar Nova Instituição (Clínica/Hospital)</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {error && <div className="bg-red-50 text-red-600 p-3.5 border border-red-100 rounded-xl text-xs font-bold mb-4">{error}</div>}
+            {success && <div className="bg-emerald-50 text-emerald-600 p-3.5 border border-emerald-100 rounded-xl text-xs font-bold mb-4">{success}</div>}
+
+            <form onSubmit={handleAddCompanySubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                
+                <div className="col-span-2 border-b border-slate-100 pb-1.5">
+                  <h4 className="text-xs font-black text-slate-700">Dados da Instituição</h4>
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Razão Social</label>
+                  <input
+                    type="text" required
+                    value={form.razao_social}
+                    onChange={e => setForm({...form, razao_social: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-primary-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Nome Fantasia</label>
+                  <input
+                    type="text" required
+                    value={form.nome_fantasia}
+                    onChange={e => setForm({...form, nome_fantasia: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-primary-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">CNPJ</label>
+                  <input
+                    type="text" required placeholder="00.000.000/0000-00"
+                    value={form.cnpj}
+                    onChange={e => setForm({...form, cnpj: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-primary-400"
+                  />
+                </div>
+
+                <div className="col-span-2 border-b border-slate-100 pb-1.5 mt-2">
+                  <h4 className="text-xs font-black text-slate-700">Responsável Legal</h4>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Nome do Responsável</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                      <User className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="text" required
+                      value={form.nome_responsavel}
+                      onChange={e => setForm({...form, nome_responsavel: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none focus:border-primary-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">CPF do Responsável</label>
+                  <input
+                    type="text" required placeholder="000.000.000-00"
+                    value={form.cpf_responsavel}
+                    onChange={e => setForm({...form, cpf_responsavel: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-primary-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Cargo do Responsável</label>
+                  <input
+                    type="text" required placeholder="Diretor, Administrador..."
+                    value={form.cargo_responsavel}
+                    onChange={e => setForm({...form, cargo_responsavel: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:outline-none focus:border-primary-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Celular / Contato</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                      <Phone className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="text" required placeholder="(00) 00000-0000"
+                      value={form.celular}
+                      onChange={e => setForm({...form, celular: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none focus:border-primary-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="col-span-2 border-b border-slate-100 pb-1.5 mt-2">
+                  <h4 className="text-xs font-black text-slate-700">Dados de Acesso (Login)</h4>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">E-mail corporativo (Login)</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                      <Mail className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="email" required placeholder="clinica@email.com"
+                      value={form.email}
+                      onChange={e => setForm({...form, email: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none focus:border-primary-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">Senha de Acesso</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="password" required placeholder="senha temporária"
+                      value={form.senha}
+                      onChange={e => setForm({...form, senha: e.target.value})}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none focus:border-primary-400"
+                    />
+                  </div>
+                </div>
+
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-xs font-bold text-slate-600 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl text-xs font-bold shadow-lg shadow-primary-600/10 transition-colors cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  {saving ? 'Cadastrando...' : 'Cadastrar Instituição'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
