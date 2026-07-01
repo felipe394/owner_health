@@ -48,7 +48,12 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', system: 'Owner Health API', timestamp: new Date().toISOString() });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`✅ Owner Health API rodando na porta ${PORT}`);
-});
+// Start server only if not running on Vercel
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`✅ Owner Health API rodando na porta ${PORT}`);
+  });
+}
+
+// Export the app for Vercel Serverless Functions
+module.exports = app;
