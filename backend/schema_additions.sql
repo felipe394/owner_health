@@ -116,6 +116,12 @@ CREATE TABLE IF NOT EXISTS satisfacao (
   FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Alterações na tabela profissionais
+ALTER TABLE profissionais
+  ADD COLUMN IF NOT EXISTS tipo_profissional VARCHAR(50) DEFAULT 'medico',
+  ADD COLUMN IF NOT EXISTS ativo TINYINT(1) DEFAULT 1,
+  MODIFY COLUMN numero_conselho VARCHAR(50) NULL;
+
 -- Adicionar coluna plano_plataforma na tabela clientes (Free, Prata, Pro)
 ALTER TABLE clientes
   ADD COLUMN IF NOT EXISTS plano_plataforma ENUM('free', 'prata', 'pro') DEFAULT 'free',

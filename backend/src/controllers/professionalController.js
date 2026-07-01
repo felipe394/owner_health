@@ -197,6 +197,63 @@ const registerProfessional = async (req, res) => {
   }
 };
 
+const updateProfessional = async (req, res) => {
+  const { id } = req.params;
+  let {
+    nome, cpf, data_nascimento, endereco, cep, logradouro, numero, complemento, bairro, cidade, estado,
+    numero_conselho, tipo_profissional, email, celular, senha
+  } = req.body;
+
+  if (!endereco && logradouro && numero && estado && cep) {
+    endereco = `${logradouro}, ${numero}${complemento ? ' - ' + complemento : ''}${bairro ? ', ' + bairro : ''}${cidade ? ', ' + cidade : ''} - ${estado}, CEP: ${cep}`;
+  }
+
+  try {
+    const profs = await dbHelper.query('profissionais', 'select', { id: parseInt(id) });
+    if (profs.length === 0) return res.status(404).json({ error: 'Profissional não encontrado' });
+    const prof = profs[0];
+
+    if (email && email !== prof.email) {
+      const existingEmail = await dbHelper.query('usuarios', 'select', { email });
+      if (existingEmail.length > 0 && existingEmail[0].id !== prof.usuario_id) {
+        return res.status(400).json({ error: 'E-mail já está em uso' });
+      }
+    }
+    if (cpf && cpf !== prof.cpf) {
+      const existingCpf = await dbHelper.query('profissionais', 'select', { cpf });
+      if (existingCpf.length > 0) return res.status(400).json({ error: 'CPF já cadastrado' });
+    }
+
+    const updates = {
+      nome: nome || prof.nome,
+      cpf: cpf || prof.cpf,
+      data_nascimento: data_nascimento || prof.data_nascimento,
+      endereco: endereco || prof.endereco,
+      numero_conselho: numero_conselho !== undefined ? numero_conselho : prof.numero_conselho,
+      tipo_profissional: tipo_profissional || prof.tipo_profissional,
+      email: email || prof.email,
+      celular: celular || prof.celular
+    };
+
+    await dbHelper.query('profissionais', 'update', { id: parseInt(id) }, updates);
+
+    if (email || senha) {
+      const userUpdates = {};
+      if (email) userUpdates.email = email;
+      if (senha) {
+        const salt = await bcrypt.genSalt(10);
+        userUpdates.senha = await bcrypt.hash(senha, salt);
+      }
+      await dbHelper.query('usuarios', 'update', { id: prof.usuario_id }, userUpdates);
+    }
+
+    return res.json({ message: 'Profissional atualizado com sucesso!' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Erro ao atualizar profissional' });
+  }
+};
+
 // Associar profissional a clínica
 const linkToCompany = async (req, res) => {
   const { id } = req.params; // professional_id
@@ -275,6 +332,7 @@ module.exports = {
   getProfessionals,
   getProfessionalById,
   registerProfessional,
+  updateProfessional,
   toggleProfessionalAccess,
   linkToCompany,
   unlinkFromCompany,

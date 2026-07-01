@@ -27,12 +27,23 @@ export const ClientLogin = () => {
 
       if (!response.ok) {
         let errorMsg = 'Falha na autenticação';
+        let errorCode = '';
         try {
           const data = await response.json();
           errorMsg = data.error || errorMsg;
+          errorCode = data.code || '';
         } catch {
           errorMsg = `Erro ${response.status}: ${response.statusText}`;
         }
+
+        if (errorCode === 'USER_NOT_FOUND') {
+          setError(errorMsg);
+          setTimeout(() => {
+            navigate('/register/client');
+          }, 3000);
+          return;
+        }
+
         throw new Error(errorMsg);
       }
 
@@ -221,6 +232,16 @@ export const ClientLogin = () => {
                 </>
               ) : 'Acessar Carteirinha'}
             </button>
+
+            <div className="mt-4 pt-4 border-t border-slate-100 text-center">
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className="text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors font-sans w-full py-3 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100"
+              >
+                Sou Profissional ou Clínica (Ir para Portal Principal)
+              </button>
+            </div>
           </form>
 
           {/* Footer */}

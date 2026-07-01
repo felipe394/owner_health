@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Users, MapPin, Mail, Phone, Lock, Eye, EyeOff,
-  Loader2, Plus, Trash2, Search, ToggleLeft, ToggleRight
+  Loader2, Plus, Trash2, Search, ToggleLeft, ToggleRight, Pencil
 } from 'lucide-react';
 import { API_URL } from '../../config';
 
@@ -18,6 +18,7 @@ export const CompanyProfessionals: React.FC = () => {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -43,6 +44,53 @@ export const CompanyProfessionals: React.FC = () => {
   useEffect(() => {
     fetchProfessionals();
   }, [token, companyId]);
+
+  const openNewModal = () => {
+    setEditingId(null);
+    setForm({
+      nome: '', cpf: '', data_nascimento: '',
+      cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
+      email: '', celular: '',
+      tipo_profissional: 'medico',
+      especialidade: 'Clínico Geral', tipo_conselho: 'CRM', numero_conselho: '',
+      senha: '', confirmar_senha: ''
+    });
+    setError('');
+    setSuccess('');
+    setShowModal(true);
+  };
+
+  const handleEdit = (prof: any) => {
+    setEditingId(prof.id);
+    let conselho = 'CRM';
+    let num_conselho = '';
+    if (prof.numero_conselho) {
+      const parts = prof.numero_conselho.split(' ');
+      if (parts.length > 1) {
+        conselho = parts[0];
+        num_conselho = parts[1];
+      } else {
+        num_conselho = prof.numero_conselho;
+      }
+    }
+    
+    setForm({
+      nome: prof.nome || '',
+      cpf: prof.cpf || '',
+      data_nascimento: prof.data_nascimento ? prof.data_nascimento.split('T')[0] : '',
+      cep: '', logradouro: prof.endereco || '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
+      email: prof.email || '',
+      celular: prof.celular || '',
+      tipo_profissional: prof.tipo_profissional || 'medico',
+      especialidade: prof.especialidade || 'Clínico Geral',
+      tipo_conselho: conselho,
+      numero_conselho: num_conselho,
+      senha: '', confirmar_senha: ''
+    });
+    setError('');
+    setSuccess('');
+    setShowModal(true);
+  };
 
   const fetchProfessionals = async () => {
     setLoading(true);
@@ -146,7 +194,12 @@ export const CompanyProfessionals: React.FC = () => {
       return;
     }
 
-    if (form.senha.length < 6) {
+    if (!editingId && form.senha.length < 6) {
+      setError('A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+
+    if (editingId && form.senha && form.senha.length < 6) {
       setError('A senha deve ter pelo menos 6 caracteres.');
       return;
     }
@@ -175,8 +228,13 @@ export const CompanyProfessionals: React.FC = () => {
         company_id: parseInt(companyId)
       };
 
-      const res = await fetch(`${API_URL}/api/professionals/register`, {
-        method: 'POST',
+      const url = editingId 
+        ? `${API_URL}/api/professionals/${editingId}`
+        : `${API_URL}/api/professionals/register`;
+      const method = editingId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
@@ -189,7 +247,7 @@ export const CompanyProfessionals: React.FC = () => {
         throw new Error(data.error || 'Erro ao cadastrar profissional.');
       }
 
-      setSuccess('Profissional cadastrado e vinculado com sucesso!');
+      setSuccess(editingId ? 'Profissional atualizado com sucesso!' : 'Profissional cadastrado e vinculado com sucesso!');
       setForm({
         nome: '', cpf: '', data_nascimento: '',
         cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
@@ -226,7 +284,7 @@ export const CompanyProfessionals: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openNewModal}
           className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md shadow-indigo-600/10 hover:-translate-y-0.5"
         >
           <Plus className="w-4 h-4" />
@@ -322,13 +380,22 @@ export const CompanyProfessionals: React.FC = () => {
                       </button>
                     </td>
                     <td className="px-5 py-4 text-right">
-                      <button
-                        onClick={() => handleRemoveLink(prof.id)}
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleEdit(prof)}
+                          className="p-1.5 border border-slate-100 hover:border-indigo-100 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                          title="Editar profissional"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleRemoveLink(prof.id)}
                         className="p-1.5 border border-slate-100 hover:border-red-100 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                         title="Desvincular da clínica"
                       >
                         <Trash2 className="w-4 h-4" />
-                      </button>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -344,8 +411,14 @@ export const CompanyProfessionals: React.FC = () => {
           <div className="fixed inset-0 bg-slate-900/60" onClick={() => setShowModal(false)} />
           <div className="bg-white rounded-[2rem] w-full max-w-2xl p-6 md:p-8 relative z-10 max-h-[90vh] overflow-y-auto shadow-2xl space-y-6">
             <div>
-              <h3 className="text-xl font-black text-slate-800">Cadastrar Membro da Equipe</h3>
-              <p className="text-xs text-slate-400 font-medium">Cadastre um profissional com login e senha corporativa.</p>
+              <h3 className="text-xl font-black text-slate-800">
+                {editingId ? 'Editar Membro da Equipe' : 'Cadastrar Membro da Equipe'}
+              </h3>
+              <p className="text-xs text-slate-400 font-medium">
+                {editingId 
+                  ? 'Atualize os dados do profissional.' 
+                  : 'Cadastre um profissional com login e senha corporativa.'}
+              </p>
             </div>
 
             {error && (
@@ -567,13 +640,15 @@ export const CompanyProfessionals: React.FC = () => {
               {/* Login e Senha */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-slate-100 pt-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Senha de Acesso *</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
+                    Senha de Acesso {editingId ? '(Opcional)' : '*'}
+                  </label>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
                       <Lock className="w-4 h-4" />
                     </span>
                     <input
-                      type={showPassword ? 'text' : 'password'} required
+                      type={showPassword ? 'text' : 'password'} required={!editingId}
                       value={form.senha}
                       onChange={e => setForm({...form, senha: e.target.value})}
                       placeholder="Mínimo 6 dígitos"
@@ -589,13 +664,15 @@ export const CompanyProfessionals: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">Confirmar Senha *</label>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
+                    Confirmar Senha {editingId ? '(Opcional)' : '*'}
+                  </label>
                   <div className="relative">
                     <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400">
                       <Lock className="w-4 h-4" />
                     </span>
                     <input
-                      type="password" required
+                      type="password" required={!editingId}
                       value={form.confirmar_senha}
                       onChange={e => setForm({...form, confirmar_senha: e.target.value})}
                       placeholder="Repita a senha"
@@ -622,7 +699,7 @@ export const CompanyProfessionals: React.FC = () => {
                   {submitLoading ? (
                     <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Salvando...</>
                   ) : (
-                    <><span>Cadastrar e Vincular</span></>
+                    <><span>{editingId ? 'Salvar Alterações' : 'Cadastrar e Vincular'}</span></>
                   )}
                 </button>
               </div>

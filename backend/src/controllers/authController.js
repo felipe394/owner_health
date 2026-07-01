@@ -87,16 +87,21 @@ const authenticate = async (req, res) => {
     if (!user) {
       const mockUser = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (mockUser) {
+        user = mockUser;
         // Senha mockada padrão é '123456'
         passwordMatch = password === '123456' || await bcrypt.compare(password, mockUser.passwordHash);
-        if (passwordMatch) {
-          user = mockUser;
-        }
       }
     }
 
-    if (!user || !passwordMatch) {
-      return res.status(401).json({ error: 'Credenciais inválidas' });
+    if (!user) {
+      return res.status(401).json({ 
+        error: 'Você ainda não está cadastrado no sistema da Owner. Redirecionando para o cadastro...',
+        code: 'USER_NOT_FOUND' 
+      });
+    }
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: 'E-mail ou senha incorretos' });
     }
 
     // Coleta todas as roles ativas para esse usuário
