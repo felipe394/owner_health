@@ -54,7 +54,7 @@ import { CompanyPlans } from './pages/Company/CompanyPlans';
 import { ProfessionalLayout } from './components/ProfessionalLayout';
 // Reuse company pages inside the professional portal
 import { CompanyDashboard as ProfDashboard } from './pages/Company/CompanyDashboard';
-import { CompanyScheduling as ProfScheduling } from './pages/Company/CompanyScheduling';
+import { ProfessionalScheduling as ProfScheduling } from './pages/Professional/ProfessionalScheduling';
 import { CompanyPatientData as ProfPatients } from './pages/Company/CompanyPatientData';
 import { CompanyPrescriptions as ProfPrescriptions } from './pages/Company/CompanyPrescriptions';
 import { CompanyProfessionals as ProfTeam } from './pages/Company/CompanyProfessionals';

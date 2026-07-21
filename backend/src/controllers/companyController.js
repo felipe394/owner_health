@@ -10,6 +10,19 @@ const getCompanies = async (req, res) => {
   }
 };
 
+const getPublicCompanies = async (req, res) => {
+  try {
+    const companies = await dbHelper.query('empresas', 'select');
+    const publicCompanies = companies.map(c => ({
+      id: c.id,
+      nome_fantasia: c.nome_fantasia || c.razao_social
+    }));
+    return res.json(publicCompanies);
+  } catch (err) {
+    return res.status(500).json({ error: 'Erro ao listar empresas' });
+  }
+};
+
 const getCompanyById = async (req, res) => {
   const { id } = req.params;
   try {
@@ -303,7 +316,8 @@ const createCompanyDocument = async (req, res) => {
     return res.status(400).json({ error: 'Preencha todos os campos obrigatórios' });
   }
   try {
-    const [insertedId] = await dbHelper.query('empresa_documentos_emitidos', 'insert', {
+    const db = require('../../knexfile');
+    const [insertedId] = await db('empresa_documentos_emitidos').insert({
       empresa_id: parseInt(id),
       profissional_id: profissional_id ? parseInt(profissional_id) : null,
       paciente_cpf,
@@ -314,13 +328,41 @@ const createCompanyDocument = async (req, res) => {
     });
     return res.status(201).json({ message: 'Documento emitido e assinado com sucesso!', id: insertedId });
   } catch (err) {
+    console.error('Erro em createCompanyDocument:', err);
     return res.status(500).json({ error: 'Erro ao emitir documento' });
+  }
+};
+
+const getCompanyDocuments = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const db = require('../../knexfile');
+    const docs = await db('empresa_documentos_emitidos')
+      .where({ empresa_id: parseInt(id) })
+      .orderBy('criado_em', 'desc')
+      .select();
+
+    const profIds = Array.from(new Set(docs.map(d => d.profissional_id).filter(Boolean)));
+    const profs = profIds.length > 0 ? await db('profissionais').whereIn('id', profIds).select('id', 'nome', 'numero_conselho') : [];
+    const profMap = new Map(profs.map(p => [p.id, p]));
+
+    const result = docs.map(d => ({
+      ...d,
+      medico_nome: profMap.get(d.profissional_id)?.nome || 'Médico Credenciado',
+      medico_crm: profMap.get(d.profissional_id)?.numero_conselho || 'CRM/UF'
+    }));
+
+    return res.json(result);
+  } catch (err) {
+    console.error('Erro em getCompanyDocuments:', err);
+    return res.status(500).json({ error: 'Erro ao obter histórico de documentos' });
   }
 };
 
 module.exports = {
   getCompanies,
   getCompanyById,
+  getPublicCompanies,
   registerCompany,
   addCompanyHealthPlan,
   removeCompanyHealthPlan,
@@ -330,5 +372,6 @@ module.exports = {
   getAnamnesisConfig,
   updateAnamnesisConfig,
   getSharedPatientData,
-  createCompanyDocument
+  createCompanyDocument,
+  getCompanyDocuments
 };

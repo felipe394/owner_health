@@ -18,6 +18,13 @@ const bioimpedanceRoutes = require('./src/routes/bioimpedance');
 const anamnesisRoutes = require('./src/routes/anamnesis');
 const satisfactionRoutes = require('./src/routes/satisfaction');
 const auditLogsRoutes = require('./src/routes/auditLogs');
+const agendasRoutes = require('./src/routes/agendas');
+const bloqueiosRoutes = require('./src/routes/bloqueios');
+const notificacoesRoutes = require('./src/routes/notificacoes');
+const path = require('path');
+const uploadRoutes = require('./src/routes/upload');
+const patientAnamnesisRoutes = require('./src/routes/patientAnamnesis');
+const anamnesisTemplateRoutes = require('./src/routes/anamnesisTemplateRoutes');
 
 const { contextMiddleware } = require('./src/middleware/context');
 
@@ -26,9 +33,12 @@ const PORT = process.env.PORT || 3001;
 
 // Middlewares
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(contextMiddleware);
+
+// Servir arquivos estáticos da pasta uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rotas principais
 app.use('/api/auth', authRoutes);
@@ -38,6 +48,7 @@ app.use('/api/companies', companyRoutes);
 app.use('/api/professionals', professionalRoutes);
 app.use('/api/health-plans', healthPlanRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // Novos módulos
 app.use('/api/exams', examRoutes);
@@ -47,6 +58,11 @@ app.use('/api/bioimpedance', bioimpedanceRoutes);
 app.use('/api/anamnesis', anamnesisRoutes);
 app.use('/api/satisfaction', satisfactionRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
+app.use('/api/agendas', agendasRoutes);
+app.use('/api/bloqueios', bloqueiosRoutes);
+app.use('/api/notificacoes', notificacoesRoutes);
+app.use('/api/patient-anamnesis', patientAnamnesisRoutes);
+app.use('/api/anamnesis-templates', anamnesisTemplateRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

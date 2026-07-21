@@ -286,11 +286,21 @@ export const CompanyProfessionals: React.FC = () => {
     }
   };
 
-  const filteredProfs = professionals.filter(p =>
-    p.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.tipo_profissional || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (p.email || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const userRaw = localStorage.getItem('user');
+  const user = userRaw ? JSON.parse(userRaw) : null;
+  const currentUserRole = user?.tipo_profissional || 'medico';
+
+  const filteredProfs = professionals.filter(p => {
+    if ((currentUserRole === 'secretario' || currentUserRole === 'secretaria') && p.tipo_profissional === 'administrativo') {
+      return false;
+    }
+    const q = searchQuery.toLowerCase();
+    return (
+      p.nome.toLowerCase().includes(q) ||
+      (p.tipo_profissional || '').toLowerCase().includes(q) ||
+      (p.email || '').toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -475,7 +485,9 @@ export const CompanyProfessionals: React.FC = () => {
                   >
                     <option value="medico">Médico / Pro de Saúde</option>
                     <option value="secretario">Secretário(a)</option>
-                    <option value="administrativo">Administrativo</option>
+                    {currentUserRole === 'administrativo' && (
+                      <option value="administrativo">Administrativo</option>
+                    )}
                   </select>
                 </div>
               </div>

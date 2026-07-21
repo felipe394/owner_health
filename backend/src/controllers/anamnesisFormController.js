@@ -122,7 +122,7 @@ const getQuestions = async (req, res) => {
 
 const createQuestion = async (req, res) => {
   const { section_id } = req.params;
-  const { texto, tipo, obrigatoria, ordem, placeholder, descricao, escala_min, escala_max, escala_label_min, escala_label_max } = req.body;
+  const { texto, tipo, obrigatoria, ordem, placeholder, descricao, escala_min, escala_max, escala_label_min, escala_label_max, parent_option_id } = req.body;
   try {
     const data = {
       section_id: parseInt(section_id),
@@ -136,6 +136,7 @@ const createQuestion = async (req, res) => {
       escala_max: escala_max || 10,
       escala_label_min: escala_label_min || 'Mínimo',
       escala_label_max: escala_label_max || 'Máximo',
+      parent_option_id: parent_option_id || null,
       ativo: 1,
       criado_em: new Date().toISOString()
     };
@@ -153,7 +154,9 @@ const createQuestion = async (req, res) => {
 
 const updateQuestion = async (req, res) => {
   const { id } = req.params;
-  const data = req.body;
+  const { texto, tipo, obrigatoria, ordem, placeholder, descricao, escala_min, escala_max, escala_label_min, escala_label_max, parent_option_id, ativo } = req.body;
+  const data = { texto, tipo, obrigatoria, ordem, placeholder, descricao, escala_min, escala_max, escala_label_min, escala_label_max, parent_option_id, ativo };
+  Object.keys(data).forEach(key => data[key] === undefined && delete data[key]);
   try {
     try {
       await db('anamnesis_questions').where({ id }).update(data);
@@ -276,13 +279,18 @@ const updateOptions = async (req, res) => {
     try {
       await db('anamnesis_options').where({ question_id }).delete();
       if (options && options.length) {
-        const rows = options.map((o, idx) => ({
-          question_id: parseInt(question_id),
-          texto: o.texto,
-          ordem: idx,
-          ativo: 1
-        }));
-        await db('anamnesis_options').insert(rows);
+        for (let idx = 0; idx < options.length; idx++) {
+          const oldId = options[idx].id;
+          const [newId] = await db('anamnesis_options').insert({
+            question_id: parseInt(question_id),
+            texto: options[idx].texto,
+            ordem: idx,
+            ativo: 1
+          });
+          if (oldId && newId) {
+            await db('anamnesis_questions').where({ parent_option_id: oldId }).update({ parent_option_id: newId });
+          }
+        }
       }
     } catch {
       const { memoryDb } = dbHelper;
@@ -293,12 +301,21 @@ const updateOptions = async (req, res) => {
       }
       if (options && options.length) {
         for (let idx = 0; idx < options.length; idx++) {
-          await dbHelper.query('anamnesis_options', 'insert', {
+          const oldId = options[idx].id;
+          const [newId] = await dbHelper.query('anamnesis_options', 'insert', {
             question_id: parseInt(question_id),
             texto: options[idx].texto,
             ordem: idx,
             ativo: 1
           });
+          
+          if (oldId && newId) {
+            // Update any question that was linked to this old option
+            await dbHelper.query('anamnesis_questions', 'update', 
+              { parent_option_id: oldId }, 
+              { parent_option_id: newId }
+            );
+          }
         }
       }
     }

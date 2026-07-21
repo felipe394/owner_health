@@ -134,3 +134,64 @@ ALTER TABLE usuarios
   ADD COLUMN IF NOT EXISTS eh_empresa TINYINT(1) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS eh_profissional TINYINT(1) DEFAULT 0,
   ADD COLUMN IF NOT EXISTS eh_dependente TINYINT(1) DEFAULT 0;
+
+
+-- Formulários de Anamnese por Paciente (Requests)
+CREATE TABLE IF NOT EXISTS patient_anamnesis_requests (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  empresa_id INT NOT NULL,
+  cliente_id INT NOT NULL,
+  medico_id INT,
+  status VARCHAR(50) DEFAULT 'aguardando',
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  respondido_em DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS patient_anamnesis_sections (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  request_id INT NOT NULL,
+  titulo VARCHAR(255) NOT NULL,
+  descricao TEXT,
+  ordem INT DEFAULT 0,
+  ativo TINYINT(1) DEFAULT 1,
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (request_id) REFERENCES patient_anamnesis_requests(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS patient_anamnesis_questions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  section_id INT NOT NULL,
+  texto VARCHAR(255) NOT NULL,
+  tipo VARCHAR(50) NOT NULL,
+  obrigatoria TINYINT(1) DEFAULT 0,
+  ordem INT DEFAULT 0,
+  placeholder VARCHAR(255),
+  descricao TEXT,
+  escala_min INT DEFAULT 1,
+  escala_max INT DEFAULT 10,
+  escala_label_min VARCHAR(100),
+  escala_label_max VARCHAR(100),
+  parent_option_id INT,
+  ativo TINYINT(1) DEFAULT 1,
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (section_id) REFERENCES patient_anamnesis_sections(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS patient_anamnesis_options (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  question_id INT NOT NULL,
+  texto VARCHAR(255) NOT NULL,
+  ordem INT DEFAULT 0,
+  ativo TINYINT(1) DEFAULT 1,
+  FOREIGN KEY (question_id) REFERENCES patient_anamnesis_questions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS patient_anamnesis_answers (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  request_id INT NOT NULL,
+  question_id INT NOT NULL,
+  resposta TEXT NOT NULL,
+  FOREIGN KEY (request_id) REFERENCES patient_anamnesis_requests(id) ON DELETE CASCADE,
+  FOREIGN KEY (question_id) REFERENCES patient_anamnesis_questions(id) ON DELETE CASCADE
+);
+ALTER TABLE agendas ADD COLUMN cliente_id INT NULL;

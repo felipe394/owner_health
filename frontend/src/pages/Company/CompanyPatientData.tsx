@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import {
-  Search, ClipboardList, FlaskConical, Pill, Scale, FileText,
-  Loader2, ShieldAlert, ShieldCheck, Download, Calendar
+  Search, FlaskConical, Pill, Scale, FileText,
+  Loader2, ShieldAlert, ShieldCheck, Download, Calendar, Users, Plus
 } from 'lucide-react';
 import { API_URL } from '../../config';
+import { PatientRegistrationModal } from '../../components/PatientRegistrationModal';
+import { PatientAnamnesisCustomizerModal } from './PatientAnamnesisCustomizerModal';
 
 export const CompanyPatientData: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -11,9 +13,28 @@ export const CompanyPatientData: React.FC = () => {
   const [error, setError] = useState('');
   const [patientData, setPatientData] = useState<any>(null);
   const [activeTab, setActiveTab] = useState('anamnesis'); // anamnesis, exams, prescriptions, bioimpedance
+  const [patientsList, setPatientsList] = useState<any[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [showAnamnesisModal, setShowAnamnesisModal] = useState(false);
 
   const token = localStorage.getItem('token');
-  const companyId = localStorage.getItem('companyId') || '1';
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const companyId = user.empresa_id || user.id;
+
+  const fetchPatients = () => {
+    fetch(`${API_URL}/api/clients`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) setPatientsList(data);
+      })
+      .catch(console.error);
+  };
+
+  React.useEffect(() => {
+    fetchPatients();
+  }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,15 +59,34 @@ export const CompanyPatientData: React.FC = () => {
     }
   };
 
+  const loadPatientByCpf = async (cpf: string) => {
+    setSearchQuery(cpf);
+    setLoading(true);
+    setError('');
+    setPatientData(null);
+    try {
+      const res = await fetch(`${API_URL}/api/companies/${companyId}/patient-data/${cpf}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erro ao carregar prontuário.');
+      setPatientData(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn">
       <div>
         <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-          <ClipboardList className="w-6 h-6 text-indigo-600" />
-          <span>Prontuários e Exames Compartilhados</span>
+          <Users className="w-6 h-6 text-indigo-600" />
+          <span>Gerenciamento de Pacientes</span>
         </h2>
         <p className="text-xs text-slate-500 font-medium mt-0.5">
-          Pesquise o CPF ou o código de compartilhamento temporário gerado pelo paciente para visualizar dados clínicos e exames.
+          Lista de pacientes da clínica e acesso a prontuários e exames.
         </p>
       </div>
 
@@ -82,6 +122,54 @@ export const CompanyPatientData: React.FC = () => {
           </div>
         )}
       </div>
+
+      {!patientData && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-lg font-bold text-slate-800">Pacientes Vinculados</h3>
+            {user.tipo_profissional !== 'medico' && (
+              <button
+                onClick={() => setShowModal(true)}
+                className="flex items-center gap-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-4 py-2 rounded-xl text-sm font-bold transition"
+              >
+                <Plus className="w-4 h-4" />
+                Novo Paciente
+              </button>
+            )}
+          </div>
+          
+          {patientsList.length === 0 ? (
+            <p className="text-slate-500 text-sm text-center py-8">Nenhum paciente vinculado à clínica no momento.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {patientsList.map(p => (
+                <div key={p.id} className="border border-slate-150 p-4 rounded-xl hover:shadow-md transition bg-slate-50 flex flex-col justify-between gap-4">
+                  <div>
+                    <h4 className="font-bold text-slate-800">{p.nome}</h4>
+                    <p className="text-xs text-slate-500 mt-1">CPF: {p.cpf}</p>
+                    <p className="text-xs text-slate-500">Cel: {p.celular}</p>
+                  </div>
+                  <button 
+                    onClick={() => loadPatientByCpf(p.cpf)}
+                    className="w-full py-2 bg-white border border-indigo-200 text-indigo-600 rounded-lg text-xs font-bold hover:bg-indigo-50 transition"
+                  >
+                    Ver Prontuário
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modal de Novo Paciente */}
+      {showModal && (
+        <PatientRegistrationModal 
+          companyId={companyId} 
+          onClose={() => setShowModal(false)} 
+          onSuccess={() => { setShowModal(false); fetchPatients(); }} 
+        />
+      )}
 
       {/* Prontuário do Paciente */}
       {patientData && (
@@ -177,8 +265,19 @@ export const CompanyPatientData: React.FC = () => {
                 {/* Tab: Anamnese */}
                 {activeTab === 'anamnesis' && (
                   <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-black text-slate-800">Histórico de Anamnese</h3>
+                      <button 
+                        onClick={() => setShowAnamnesisModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Nova Solicitação de Anamnese
+                      </button>
+                    </div>
+
                     {patientData.anamnesis.length === 0 ? (
-                      <p className="text-xs text-slate-400 font-semibold italic text-center py-10">O paciente não preencheu o formulário de anamnese.</p>
+                      <p className="text-xs text-slate-400 font-semibold italic text-center py-10">O paciente não preencheu o formulário de anamnese legado.</p>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs font-semibold text-slate-600">
                         {patientData.anamnesis.map((a: any) => (
@@ -352,6 +451,19 @@ export const CompanyPatientData: React.FC = () => {
           </div>
 
         </div>
+      )}
+
+      {showAnamnesisModal && patientData && (
+        <PatientAnamnesisCustomizerModal
+          companyId={companyId!}
+          patientId={patientData.patient.id}
+          onClose={() => setShowAnamnesisModal(false)}
+          onSuccess={() => {
+            setShowAnamnesisModal(false);
+            alert('Anamnese enviada com sucesso!');
+            // Ideally we refresh the requests list here
+          }}
+        />
       )}
     </div>
   );

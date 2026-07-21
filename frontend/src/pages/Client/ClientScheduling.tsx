@@ -19,9 +19,13 @@ interface Appointment {
   status: string;
 }
 
-
-
-const TIME_SLOTS = ['08:30', '09:15', '10:00', '10:45', '13:30', '14:15', '15:00', '15:45', '16:30'];
+interface AgendaSlot {
+  id: number;
+  data: string;
+  hora_inicio: string;
+  hora_fim: string;
+  status: string;
+}
 
 export const ClientScheduling: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -43,7 +47,10 @@ export const ClientScheduling: React.FC = () => {
 
   // Form Booking
   const [bookingDate, setBookingDate] = useState(new Date(Date.now() + 86400000).toISOString().split('T')[0]); // Amanhã
-  const [bookingTime, setBookingTime] = useState('');
+  const [bookingSlot, setBookingSlot] = useState<AgendaSlot | null>(null);
+  const [availableSlots, setAvailableSlots] = useState<AgendaSlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [isMonthClosed, setIsMonthClosed] = useState(false);
   const [bookingPhone, setBookingPhone] = useState('');
 
   const activeProfileId = localStorage.getItem('activeProfileId');
@@ -65,7 +72,7 @@ export const ClientScheduling: React.FC = () => {
       const formatted = Array.isArray(data) ? data.filter((p: any) => p.tipo_profissional === 'medico').map((p: any) => ({
         id: p.id,
         nome: p.nome,
-        especialidade: p.especialidade || p.tipo_profissional || 'Clínico Geral',
+        especialidade: p.especialidade || 'Clínico Geral',
         conselho: p.numero_conselho || 'Sem conselho',
         clinica: 'Clínica Principal', // Simplificado
         planos: ['Particular'],
@@ -94,34 +101,116 @@ export const ClientScheduling: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (bookingModal && bookingDate) {
+      fetchAvailableSlots();
+    }
+  }, [bookingModal, bookingDate]);
+
+  const fetchAvailableSlots = async () => {
+    if (!bookingModal) return;
+    setSlotsLoading(true);
+    setBookingSlot(null);
+    setIsMonthClosed(false);
+    try {
+      const token = localStorage.getItem('token');
+      
+      const [yearStr, monthStr] = bookingDate.split('-');
+      const currentMonth = parseInt(monthStr, 10);
+      const currentYear = parseInt(yearStr, 10);
+      
+      try {
+        const blocksRes = await fetch(`${API_URL}/api/bloqueios?profissional_id=${bookingModal.id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (blocksRes.ok) {
+          const blocks = await blocksRes.json();
+          const blocked = blocks.some((b: any) => b.mes === currentMonth && b.ano === currentYear && b.status === 'bloqueado');
+          if (blocked) {
+            setIsMonthClosed(true);
+            setAvailableSlots([]);
+            setSlotsLoading(false);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      const res = await fetch(`${API_URL}/api/agendas?profissional_id=${bookingModal.id}&data_inicio=${bookingDate}&data_fim=${bookingDate}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        
+        // Filter out past slots
+        const now = new Date();
+        const currentDateStr = now.toLocaleDateString('en-CA'); // YYYY-MM-DD local
+        const currentTimeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        
+        const validSlots = data.filter((slot: any) => {
+          const slotDateStr = slot.data.substring(0, 10);
+          if (slotDateStr < currentDateStr) return false;
+          if (slotDateStr === currentDateStr && slot.hora_inicio.substring(0, 5) <= currentTimeStr) return false;
+          return true;
+        });
+
+        setAvailableSlots(validSlots);
+      } else {
+        setAvailableSlots([]);
+      }
+    } catch {
+      setAvailableSlots([]);
+    } finally {
+      setSlotsLoading(false);
+    }
+  };
+
+  // Normaliza strings removendo acentos e convertendo para minúsculas
+  const normalize = (str: string) => str ? str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() : '';
+
   // Filtragem dinâmica local baseada nos inputs do usuário
   const filteredProfessionals = professionals.filter(prof => {
-    const matchesSpec = !specFilter || prof.especialidade.toLowerCase().includes(specFilter.toLowerCase());
-    const matchesName = !nameFilter || prof.nome.toLowerCase().includes(nameFilter.toLowerCase());
-    const matchesClinic = !clinicFilter || prof.clinica.toLowerCase().includes(clinicFilter.toLowerCase());
-    const matchesPlan = !planFilter || prof.planos.some(p => p.toLowerCase().includes(planFilter.toLowerCase()));
+    const normSpec = normalize(prof.especialidade);
+    const normFilter = normalize(specFilter);
+    const matchesSpec = !specFilter || normSpec.includes(normFilter) || normFilter.includes(normSpec);
+    const matchesName = !nameFilter || normalize(prof.nome).includes(normalize(nameFilter));
+    const matchesClinic = !clinicFilter || normalize(prof.clinica).includes(normalize(clinicFilter));
+    const matchesPlan = !planFilter || prof.planos.some(p => normalize(p).includes(normalize(planFilter)));
     const matchesCep = !cepFilter || prof.cep.replace(/\D/g,'').includes(cepFilter.replace(/\D/g,''));
     
     return matchesSpec && matchesName && matchesClinic && matchesPlan && matchesCep;
   });
 
-  const handleBookSubmit = (e: React.FormEvent) => {
+  const handleBookSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bookingModal || !bookingTime) {
+    if (!bookingModal || !bookingSlot) {
       alert('Selecione um horário para confirmar.');
       return;
     }
 
     setBookingLoading(true);
     
-    setTimeout(() => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/agendas/${bookingSlot.id}/book`, {
+        method: 'POST',
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ cliente_id: activeProfileId })
+      });
+
+      if (!res.ok) {
+        throw new Error('Falha ao agendar. O horário pode não estar mais disponível.');
+      }
+
       const newAppt: Appointment = {
-        id: `appt-${Math.random().toString(36).substring(2, 9)}`,
+        id: `appt-${bookingSlot.id}`,
         profNome: bookingModal.nome,
         especialidade: bookingModal.especialidade,
         clinica: bookingModal.clinica,
         data: new Date(bookingDate).toLocaleDateString('pt-BR'),
-        hora: bookingTime,
+        hora: bookingSlot.hora_inicio.substring(0, 5),
         status: 'Confirmado'
       };
 
@@ -129,9 +218,12 @@ export const ClientScheduling: React.FC = () => {
       setAppointments(updated);
       localStorage.setItem(`appointments_${activeProfileId}`, JSON.stringify(updated));
       
-      setBookingLoading(false);
       setBookingSuccess(true);
-    }, 1200);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao agendar consulta');
+    } finally {
+      setBookingLoading(false);
+    }
   };
 
   return (
@@ -287,7 +379,7 @@ export const ClientScheduling: React.FC = () => {
                     <button
                       onClick={() => {
                         setBookingModal(prof);
-                        setBookingTime('');
+                        setBookingSlot(null);
                         setBookingSuccess(false);
                         setBookingPhone(prof.celular || '');
                       }}
@@ -331,6 +423,7 @@ export const ClientScheduling: React.FC = () => {
                     <input
                       type="date"
                       required
+                      min={new Date().toLocaleDateString('en-CA')} // Prevent past dates
                       value={bookingDate}
                       onChange={e => setBookingDate(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:border-blue-500 transition"
@@ -339,18 +432,26 @@ export const ClientScheduling: React.FC = () => {
 
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Horários Disponíveis *</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {TIME_SLOTS.map(time => (
-                        <button
-                          key={time}
-                          type="button"
-                          onClick={() => setBookingTime(time)}
-                          className={`py-2 rounded-xl text-xs font-black border transition-all cursor-pointer ${bookingTime === time ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
-                        >
-                          {time}
-                        </button>
-                      ))}
-                    </div>
+                    {slotsLoading ? (
+                      <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 text-blue-500 animate-spin" /></div>
+                    ) : isMonthClosed ? (
+                      <div className="text-xs text-red-600 bg-red-50 p-3 rounded-xl border border-red-200 text-center font-bold">A agenda desse mês está fechada pelo médico.</div>
+                    ) : availableSlots.length === 0 ? (
+                      <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">Nenhum horário livre nesta data.</div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2">
+                        {availableSlots.map(slot => (
+                          <button
+                            key={slot.id}
+                            type="button"
+                            onClick={() => setBookingSlot(slot)}
+                            className={`py-2 rounded-xl text-xs font-black border transition-all cursor-pointer ${bookingSlot?.id === slot.id ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                          >
+                            {slot.hora_inicio.substring(0, 5)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div>
@@ -384,7 +485,7 @@ export const ClientScheduling: React.FC = () => {
                 </div>
                 <div>
                   <h4 className="text-sm font-black text-slate-800">Agendamento Realizado!</h4>
-                  <p className="text-xs text-slate-500 mt-1 font-semibold">Sua consulta com <b>{bookingModal.nome}</b> foi marcada para o dia <b>{new Date(bookingDate).toLocaleDateString('pt-BR')}</b> às <b>{bookingTime}</b>.</p>
+                  <p className="text-xs text-slate-500 mt-1 font-semibold">Sua consulta com <b>{bookingModal.nome}</b> foi marcada para o dia <b>{new Date(bookingDate).toLocaleDateString('pt-BR')}</b> às <b>{bookingSlot?.hora_inicio.substring(0, 5)}</b>.</p>
                 </div>
                 <button
                   onClick={() => setBookingModal(null)}

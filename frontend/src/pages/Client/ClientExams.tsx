@@ -47,10 +47,63 @@ export const ClientExams: React.FC = () => {
   const [generatedShareLink, setGeneratedShareLink] = useState('');
   const [sharingSuccess, setSharingSuccess] = useState(false);
 
-  const clienteId = localStorage.getItem('activeProfileId');
+  const getActiveClienteId = () => {
+    const pId = localStorage.getItem('activeProfileId');
+    if (pId && pId !== 'null' && pId !== 'undefined') return pId;
+    const uRaw = localStorage.getItem('user');
+    if (uRaw) {
+      try {
+        const u = JSON.parse(uRaw);
+        if (u.cliente_id) return String(u.cliente_id);
+        if (u.id) return String(u.id);
+      } catch {}
+    }
+    const cId = localStorage.getItem('clienteId');
+    if (cId && cId !== 'null' && cId !== 'undefined') return cId;
+    return '1';
+  };
+
+  const clienteId = getActiveClienteId();
   const token = localStorage.getItem('token');
   const userPlan = localStorage.getItem('plano_plataforma') || 'free';
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  const handleDownloadFile = async (url: string, title: string) => {
+    if (!url) return;
+    const fullUrl = url.startsWith('http') || url.startsWith('data:') ? url : `${API_URL}${url}`;
+    
+    let ext = 'pdf';
+    if (url.includes('.')) {
+      const parts = url.split('.');
+      const rawExt = parts[parts.length - 1].split('?')[0].toLowerCase();
+      if (['pdf', 'png', 'jpg', 'jpeg', 'webp', 'doc', 'docx'].includes(rawExt)) {
+        ext = rawExt;
+      }
+    }
+
+    const cleanName = `${title.toLowerCase().replace(/[^a-z0-9]/g, '_')}.${ext}`;
+
+    try {
+      const response = await fetch(fullUrl);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = cleanName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch {
+      const link = document.createElement('a');
+      link.href = fullUrl;
+      link.download = cleanName;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
   const [form, setForm] = useState({
     tipo: '', data: new Date().toISOString().split('T')[0], laboratorio: '', medico_solicitante: '', observacoes: '', arquivo_url: '',
@@ -85,71 +138,63 @@ export const ClientExams: React.FC = () => {
     }
   };
 
-  // Simulação de Leitura de IA (OCR)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Leitura Real de Arquivo e IA (OCR)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
     setOcrLoading(true);
     setExtractedOcrText('');
     
-    // Ler em base64
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      // Simula tempo de processamento da IA
-      setTimeout(() => {
-        const fileLower = file.name.toLowerCase();
-        let detectedType = 'Glicemia em Jejum';
-        let lab = 'Laboratório Central Fleury';
-        let doctor = 'Dr. Roberto Santos';
-        let ocrText = '';
-        let obs = '';
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
 
-        if (fileLower.includes('sangue') || fileLower.includes('glicose') || fileLower.includes('glicemia')) {
-          detectedType = 'Glicemia em Jejum';
-          ocrText = "LAUDO DE EXAMES LABORATORIAIS\n--------------------------------\nEXAME: GLICEMIA EM JEJUM\nRESULTADO: 110 mg/dL\nValores de referência: 70 a 99 mg/dL\n--------------------------------\nStatus: Elevado (Pré-diabetes)";
-          obs = `[OCR IA] Glicose detectada: 110 mg/dL.`;
-        } else if (fileLower.includes('coração') || fileLower.includes('ecg') || fileLower.includes('eletro')) {
-          detectedType = 'Eletrocardiograma';
-          ocrText = "CENTRO DE DIAGNÓSTICO CARDIOVASCULAR\n--------------------------------\nEXAME: ELETROCARDIOGRAMA (ECG)\nCONCLUSÃO: Ritmo sinusal com leve arritmia respiratória fisiológica.\n--------------------------------\nStatus: Normal";
-          obs = `[OCR IA] ECG analisado. Ritmo sinusal normal.`;
-        } else {
-          detectedType = 'Hemograma Completo';
-          ocrText = "HEMOGRAMA COMPLETO\n--------------------------------\nEritrócitos: 4.8 M/µL (Normal)\nHemoglobina: 14.5 g/dL (Normal)\nLeucócitos: 7.200 /µL (Normal)\nPlaquetas: 240.000 /µL (Normal)\n--------------------------------\nStatus: Sem alterações";
-          obs = `[OCR IA] Hemograma completo analisado. Todas as taxas dentro da referência.`;
-        }
+      const uploadRes = await fetch(`${API_URL}/api/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
 
-        // Multiple exams generation logic
-        if (fileLower.includes('sangue') || fileLower.includes('glicose') || fileLower.includes('glicemia')) {
-          // Automatic bulk save for "sangue" to demonstrate multiple lines
-          const examsToSave = [
-            { tipo: 'Glicemia em Jejum', data: new Date().toISOString().split('T')[0], laboratorio: lab, medico_solicitante: doctor, observacoes: '[OCR IA] Glicose detectada: 110 mg/dL.', arquivo_url: reader.result as string },
-            { tipo: 'Hemograma Completo', data: new Date().toISOString().split('T')[0], laboratorio: lab, medico_solicitante: doctor, observacoes: '[OCR IA] Hemograma sem alterações.', arquivo_url: reader.result as string }
-          ];
-          
-          Promise.all(examsToSave.map(ex => fetch(`${API_URL}/api/exams/client/${clienteId}`, {
-            method: 'POST', headers, body: JSON.stringify(ex)
-          }))).then(() => {
-            setExtractedOcrText(ocrText + "\n\n[!] 2 Exames identificados e salvos automaticamente como linhas independentes.");
-            setOcrLoading(false);
-            fetchExams();
-            setTimeout(() => setShowModal(false), 2000);
-          });
-        } else {
-          setForm(f => ({
-            ...f,
-            tipo: detectedType,
-            laboratorio: lab,
-            medico_solicitante: doctor,
-            observacoes: obs,
-            arquivo_url: reader.result as string
-          }));
-          setExtractedOcrText(ocrText);
-          setOcrLoading(false);
+      if (!uploadRes.ok) throw new Error('Falha no upload do arquivo');
+      const uploadData = await uploadRes.json();
+      
+      const fileUrl = uploadData.url;
+      const realExtractedText = uploadData.extractedText || '';
+      
+      // Detecção inteligente baseada no nome do arquivo e texto lido
+      const fileLower = (file.name + ' ' + realExtractedText).toLowerCase();
+      let detectedType = form.tipo || '';
+      
+      for (const t of EXAM_TYPES) {
+        if (fileLower.includes(t.toLowerCase())) {
+          detectedType = t;
+          break;
         }
-      }, 1800);
-    };
-    reader.readAsDataURL(file);
+      }
+      if (!detectedType || detectedType === 'Outro') {
+        if (fileLower.includes('sangue') || fileLower.includes('glicose') || fileLower.includes('glicemia')) detectedType = 'Glicemia em Jejum';
+        else if (fileLower.includes('coracao') || fileLower.includes('ecg') || fileLower.includes('eletro')) detectedType = 'Eletrocardiograma';
+        else if (fileLower.includes('urina') || fileLower.includes('eas') || fileLower.includes('creatinina')) detectedType = 'Ureia e Creatinina';
+        else if (fileLower.includes('rx') || fileLower.includes('raio')) detectedType = 'Raio-X';
+        else detectedType = 'Hemograma Completo';
+      }
+
+      setForm(f => ({
+        ...f,
+        tipo: detectedType,
+        arquivo_url: fileUrl,
+        observacoes: f.observacoes || (realExtractedText ? `[Leitura IA do Arquivo]: ${realExtractedText.slice(0, 200)}...` : `[Arquivo Anexado]: ${file.name}`)
+      }));
+
+      setExtractedOcrText(
+        `📄 LEITURA PROCESSADA DO ARQUIVO REAL (${file.name})\n----------------------------------------\n${realExtractedText}\n----------------------------------------\nURL Registrada: ${fileUrl}`
+      );
+    } catch (err: any) {
+      alert(err.message || 'Erro ao realizar upload do arquivo.');
+    } finally {
+      setOcrLoading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -359,20 +404,22 @@ export const ClientExams: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => {
-                          const isPdf = exam.arquivo_url?.startsWith('data:application/pdf');
-                          setViewingFile({ url: exam.arquivo_url!, type: isPdf ? 'pdf' : 'image' });
+                          const fullUrl = exam.arquivo_url?.startsWith('http') || exam.arquivo_url?.startsWith('data:')
+                            ? exam.arquivo_url!
+                            : `${API_URL}${exam.arquivo_url}`;
+                          const isPdf = exam.arquivo_url?.toLowerCase().includes('.pdf') || exam.arquivo_url?.startsWith('data:application/pdf');
+                          setViewingFile({ url: fullUrl, type: isPdf ? 'pdf' : 'image' });
                         }}
-                        className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700 transition"
+                        className="flex items-center gap-1 text-xs font-bold text-slate-600 hover:text-blue-600 transition cursor-pointer"
                       >
-                        <Eye className="w-3.5 h-3.5" /> Ver
+                        <Eye className="w-3.5 h-3.5 text-blue-500" /> Ver
                       </button>
-                      <a
-                        href={exam.arquivo_url}
-                        download={`exame_${exam.tipo.replace(/\s+/g, '_')}${exam.arquivo_url?.startsWith('data:application/pdf') ? '.pdf' : '.png'}`}
-                        className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline"
+                      <button
+                        onClick={() => handleDownloadFile(exam.arquivo_url!, `exame_${exam.tipo}`)}
+                        className="flex items-center gap-1 text-xs font-bold text-blue-600 hover:underline cursor-pointer"
                       >
                         <Download className="w-3.5 h-3.5" /> Baixar
-                      </a>
+                      </button>
                     </div>
                   </div>
                 )}

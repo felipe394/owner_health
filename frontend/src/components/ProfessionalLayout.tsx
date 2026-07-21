@@ -6,6 +6,7 @@ import {
   PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { ProfileModal } from './ProfileModal';
+import { NotificationBell } from './NotificationBell';
 
 interface ProfessionalLayoutProps {
   children: React.ReactNode;
@@ -35,38 +36,44 @@ export const ProfessionalLayout: React.FC<ProfessionalLayoutProps> = ({ children
 
   // Menu items por tipo de profissional
   const buildMenu = (): MenuItem[] => {
-
     if (tipo === 'medico') {
       return [
         { label: 'Minha Agenda', path: '/professional/scheduling', icon: Calendar },
-        { label: 'Pacientes', path: '/professional/patients', icon: Users },
+        { label: 'Meus Pacientes', path: '/professional/patients', icon: Users },
         { label: 'Anamnese', path: '/professional/anamnesis', icon: ClipboardList },
         { label: 'Receitas & Atestados', path: '/professional/prescriptions', icon: FileText },
         { label: 'Planos de Saúde', path: '/professional/health-plans', icon: Stethoscope },
-        { label: 'Meu Plano', path: '/professional/my-plan', icon: Stethoscope },
+        { label: 'Meu Plano', path: '/professional/my-plan', icon: HeartPulse },
       ];
     }
 
-    if (tipo === 'secretario') {
+    if (tipo === 'secretario' || tipo === 'secretaria') {
       return [
-        { label: 'Agenda', path: '/professional/scheduling', icon: Calendar },
-        { label: 'Pacientes', path: '/professional/patients', icon: Users },
+        { label: 'Agenda da Clínica', path: '/professional/scheduling', icon: Calendar },
+        { label: 'Cadastro de Pacientes', path: '/professional/patients', icon: Users },
+        { label: 'Equipe Médica', path: '/professional/team', icon: Stethoscope },
+        { label: 'Convênios & Planos', path: '/professional/health-plans', icon: ClipboardList },
       ];
     }
 
     if (tipo === 'administrativo') {
       return [
-        { label: 'Profissionais', path: '/professional/team', icon: Stethoscope },
-        { label: 'Agenda', path: '/professional/scheduling', icon: Calendar },
-        { label: 'Pacientes', path: '/professional/patients', icon: Users },
-        { label: 'Planos de Saúde', path: '/professional/health-plans', icon: ClipboardList },
-        { label: 'Anamnese', path: '/professional/anamnesis', icon: ClipboardList },
+        { label: 'Gestão da Equipe', path: '/professional/team', icon: Stethoscope },
+        { label: 'Agenda Geral', path: '/professional/scheduling', icon: Calendar },
+        { label: 'Base de Pacientes', path: '/professional/patients', icon: Users },
+        { label: 'Convênios & Planos', path: '/professional/health-plans', icon: ClipboardList },
+        { label: 'Modelos de Anamnese', path: '/professional/anamnesis', icon: FileText },
+        { label: 'Meu Plano', path: '/professional/my-plan', icon: HeartPulse },
       ];
     }
 
-    // default
+    // default (medico / outros)
     return [
-      { label: 'Agenda', path: '/professional/scheduling', icon: Calendar },
+      { label: 'Minha Agenda', path: '/professional/scheduling', icon: Calendar },
+      { label: 'Pacientes', path: '/professional/patients', icon: Users },
+      { label: 'Anamnese', path: '/professional/anamnesis', icon: ClipboardList },
+      { label: 'Receitas & Atestados', path: '/professional/prescriptions', icon: FileText },
+      { label: 'Planos de Saúde', path: '/professional/health-plans', icon: Stethoscope },
     ];
   };
 
@@ -75,6 +82,7 @@ export const ProfessionalLayout: React.FC<ProfessionalLayoutProps> = ({ children
   const roleLabelMap: Record<string, string> = {
     medico: 'Médico',
     secretario: 'Secretário(a)',
+    secretaria: 'Secretário(a)',
     administrativo: 'Administrativo',
   };
 
@@ -165,11 +173,14 @@ export const ProfessionalLayout: React.FC<ProfessionalLayoutProps> = ({ children
             </button>
             <h1 className="text-md md:text-lg font-black text-slate-800 tracking-tight">Portal Profissional</h1>
           </div>
-          <div className="hidden md:flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500">Perfil: </span>
-            <span className="text-xs font-black bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full capitalize">
-              {roleLabelMap[tipo] || tipo}
-            </span>
+          <div className="hidden md:flex items-center gap-4">
+            <NotificationBell />
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500">Perfil: </span>
+              <span className="text-xs font-black bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full capitalize">
+                {roleLabelMap[tipo] || tipo}
+              </span>
+            </div>
           </div>
         </header>
 

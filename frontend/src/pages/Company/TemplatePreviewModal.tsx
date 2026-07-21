@@ -1,0 +1,121 @@
+import React from 'react';
+import { X } from 'lucide-react';
+import type { Section, Question } from './CompanyAnamnesisConfig';
+
+interface Template {
+  id: number;
+  titulo?: string;
+  nome?: string;
+  conteudo?: Section[];
+  sections_data?: Section[];
+  criado_em: string;
+}
+
+interface Props {
+  template: Template;
+  onClose: () => void;
+}
+
+export const TemplatePreviewModal: React.FC<Props> = ({ template, onClose }) => {
+  const sections = template.sections_data || template.conteudo || [];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="bg-slate-50 rounded-3xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col animate-fadeIn">
+        <div className="flex items-center justify-between p-6 bg-white border-b border-slate-200 rounded-t-3xl">
+          <div>
+            <h2 className="text-lg font-black text-slate-800">Visualizando: {template.nome || template.titulo}</h2>
+            <p className="text-sm text-slate-500">Assim que o paciente verá este formulário.</p>
+          </div>
+          <button onClick={onClose} className="w-10 h-10 bg-slate-100 hover:bg-slate-200 rounded-xl flex items-center justify-center transition">
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+          {sections.length === 0 ? (
+            <p className="text-center text-slate-500">Este modelo está vazio.</p>
+          ) : (
+            sections.map((sec, i) => (
+              <div key={i} className="mb-8 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+                <h3 className="text-lg font-black text-slate-800 border-b border-slate-100 pb-3 mb-5">{sec.titulo}</h3>
+                {sec.descricao && <p className="text-sm text-slate-500 mb-6">{sec.descricao}</p>}
+                
+                <div className="space-y-6">
+                  {(sec.questions || []).filter(q => !q.parent_option_id).map(q => (
+                    <PreviewQuestion key={q.id} question={q} allQuestions={sec.questions || []} level={0} />
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PreviewQuestion: React.FC<{ question: Question, allQuestions: Question[], level: number }> = ({ question, allQuestions, level }) => {
+  const children = allQuestions.filter(c => 
+    c.parent_option_id != null && question.options?.some(o => String(o.id) === String(c.parent_option_id))
+  );
+
+  return (
+    <div className={`space-y-3 ${level > 0 ? 'ml-6 mt-4 border-l-2 border-violet-200 pl-4' : ''}`}>
+      <label className="block text-sm font-bold text-slate-700">
+        {question.texto} {question.obrigatoria && <span className="text-red-500">*</span>}
+      </label>
+      
+      {question.tipo === 'text' && (
+        <input disabled type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 cursor-not-allowed" placeholder={question.placeholder || 'Resposta curta...'} />
+      )}
+      
+      {question.tipo === 'textarea' && (
+        <textarea disabled rows={3} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 cursor-not-allowed" placeholder={question.placeholder || 'Resposta longa...'} />
+      )}
+      
+      {question.tipo === 'radio' && (
+        <div className="space-y-2">
+          {(question.options || []).map(opt => (
+            <label key={opt.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 opacity-80">
+              <input disabled type="radio" className="w-4 h-4 text-violet-600 border-slate-300" />
+              <span className="text-sm font-medium text-slate-600">{opt.texto}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {question.tipo === 'checkbox' && (
+        <div className="space-y-2">
+          {(question.options || []).map(opt => (
+            <label key={opt.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50 opacity-80">
+              <input disabled type="checkbox" className="w-4 h-4 text-violet-600 border-slate-300 rounded" />
+              <span className="text-sm font-medium text-slate-600">{opt.texto}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {question.tipo === 'select' && (
+        <select disabled className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-500 cursor-not-allowed">
+          <option>Selecione uma opção...</option>
+          {(question.options || []).map(opt => (
+             <option key={opt.id}>{opt.texto}</option>
+          ))}
+        </select>
+      )}
+
+      {question.tipo === 'scale' && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {Array.from({ length: (question.escala_max || 10) - (question.escala_min || 1) + 1 }).map((_, i) => (
+             <div key={i} className="w-10 h-10 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center text-sm font-bold text-slate-400">
+               {(question.escala_min || 1) + i}
+             </div>
+          ))}
+        </div>
+      )}
+
+      {children.map(c => <PreviewQuestion key={c.id} question={c} allQuestions={allQuestions} level={level + 1} />)}
+    </div>
+  );
+};

@@ -4,9 +4,22 @@ const { sendFirstAccessEmail } = require('../utils/mailer');
 
 const getClients = async (req, res) => {
   try {
-    const clients = await dbHelper.query('clientes', 'select');
+    const db = require('../../knexfile');
+    const isEmpresa = req.user && (req.user.eh_empresa || req.user.empresa_id);
+    
+    if (isEmpresa) {
+      const empresaId = req.user.empresa_id || req.user.id;
+      const relations = await db('cliente_empresas').where({ empresa_id: empresaId }).select();
+      if (relations && relations.length > 0) {
+        const clientIds = relations.map(r => r.cliente_id);
+        const clients = await db('clientes').whereIn('id', clientIds);
+        return res.json(clients);
+      }
+    }
+    const clients = await db('clientes').select('*');
     return res.json(clients);
   } catch (err) {
+    console.error('Erro em getClients:', err);
     return res.status(500).json({ error: 'Erro ao listar clientes' });
   }
 };
@@ -50,7 +63,8 @@ const registerClient = async (req, res) => {
     plano_produto,
     plano_numero_carteirinha,
     senha,
-    acceptLGPD
+    acceptLGPD,
+    empresa_id // NOVO CAMPO
   } = req.body;
 
   if (!endereco && logradouro && numero && estado && cep) {
@@ -127,6 +141,14 @@ const registerClient = async (req, res) => {
       aceito_em: new Date(),
       versao_termos: '1.0'
     });
+
+    // Vincular à clínica/empresa se fornecido
+    if (empresa_id) {
+      await dbHelper.query('cliente_empresas', 'insert', {
+        cliente_id: clientId,
+        empresa_id: parseInt(empresa_id)
+      });
+    }
 
     // Enviar e-mail de primeiro acesso
     await sendFirstAccessEmail({

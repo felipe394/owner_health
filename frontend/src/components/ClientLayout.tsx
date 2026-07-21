@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { API_URL } from '../config';
 import { ProfileModal } from './ProfileModal';
+import { NotificationBell } from './NotificationBell';
 
 interface ClientLayoutProps { children: React.ReactNode; }
 
@@ -182,11 +183,20 @@ export const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
               </button>
               <h1 className="text-md md:text-lg font-black text-slate-800 tracking-tight">Portal do Beneficiário</h1>
             </div>
-            <div className="hidden md:flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">Perfil ativo: </span>
-              <span className="text-xs font-black bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full capitalize">
-                {activeProfileName} ({activeProfileRole === 'client' ? 'Titular' : 'Dependente'})
-              </span>
+            
+            {/* Mobile Header Actions */}
+            <div className="flex md:hidden items-center gap-3">
+              <NotificationBell />
+            </div>
+
+            <div className="hidden md:flex items-center gap-4">
+              <NotificationBell />
+              <div className="flex items-center gap-2 border-l border-slate-200 pl-4">
+                <span className="text-xs font-semibold text-slate-500">Perfil ativo: </span>
+                <span className="text-xs font-black bg-blue-50 text-blue-600 px-2.5 py-1 rounded-full capitalize">
+                  {activeProfileName} ({activeProfileRole === 'client' ? 'Titular' : 'Dependente'})
+                </span>
+              </div>
             </div>
           </header>
 
@@ -202,9 +212,12 @@ export const ClientLayout: React.FC<ClientLayoutProps> = ({ children }) => {
                     </div>
                     <span className="font-black text-white text-md">Owner Health</span>
                   </div>
-                  <button onClick={() => setMobileMenuOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
-                    <X className="w-6 h-6" />
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <NotificationBell />
+                    <button onClick={() => setMobileMenuOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
                 </div>
                 <SidebarContent onNavigate={() => setMobileMenuOpen(false)} />
               </div>

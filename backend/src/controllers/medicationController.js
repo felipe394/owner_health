@@ -4,58 +4,162 @@ const nodemailer = require('nodemailer');
 
 // ─── Medicamentos ────────────────────────────────────────────────────────────
 
+function formatToMysqlDate(dateStr) {
+  if (!dateStr || typeof dateStr !== 'string' || dateStr.trim() === '') return null;
+  const str = dateStr.trim();
+  if (str.includes('/')) {
+    const parts = str.split('/');
+    if (parts.length === 3) {
+      const [day, month, year] = parts;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+  }
+  if (str.includes('T')) {
+    return str.split('T')[0];
+  }
+  return str;
+}
+
 const getMedications = async (req, res) => {
   const { cliente_id } = req.params;
   try {
-    const meds = await dbHelper.query('medicamentos', 'select', { cliente_id });
-    return res.json(meds);
+    const cId = parseInt(cliente_id) || 1;
+    let realClienteId = cId;
+    try {
+      const client = await db('clientes').where({ id: cId }).orWhere({ usuario_id: cId }).first();
+      if (client) {
+        realClienteId = client.id;
+      }
+    } catch {}
+
+    const medsRaw = await db('medicamentos')
+      .where({ cliente_id: realClienteId })
+      .orWhere({ cliente_id: cId })
+      .select();
+
+    const uniqueMedsMap = new Map();
+    medsRaw.forEach(m => uniqueMedsMap.set(m.id, m));
+    const meds = Array.from(uniqueMedsMap.values());
+
+    const medIds = meds.map(m => m.id);
+    const effects = medIds.length > 0
+      ? await db('efeitos_medicamentos').whereIn('medicamento_id', medIds).orderBy('criado_em', 'desc').select()
+      : [];
+
+    const effectMap = new Map();
+    effects.forEach(e => {
+      if (!effectMap.has(e.medicamento_id)) {
+        effectMap.set(e.medicamento_id, e.efeito);
+      }
+    });
+
+    const result = meds.map(m => ({
+      ...m,
+      efeitos: m.efeitos || effectMap.get(m.id) || null
+    }));
+
+    return res.json(result);
   } catch (err) {
+    console.error('Erro em getMedications:', err);
     return res.status(500).json({ error: 'Erro ao buscar medicamentos' });
   }
 };
 
 const createMedication = async (req, res) => {
   const { cliente_id } = req.params;
-  const { nome, posologia, horarios, data_inicio, data_fim, observacoes, email_lembrete } = req.body;
+  const { nome, posologia, horarios, data_inicio, data_fim, observacoes, email_lembrete, efeitos } = req.body;
   if (!nome) return res.status(400).json({ error: 'Nome é obrigatório' });
   try {
+    const cId = parseInt(cliente_id) || 1;
+    let realClienteId = cId;
+    try {
+      const client = await db('clientes').where({ id: cId }).orWhere({ usuario_id: cId }).first();
+      if (client) {
+        realClienteId = client.id;
+      }
+    } catch {}
+
+    const mysqlDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
     const novo = {
-      cliente_id, nome, posologia,
-      horarios: Array.isArray(horarios) ? JSON.stringify(horarios) : horarios,
-      data_inicio, data_fim, observacoes, email_lembrete,
-      ativo: true, criado_em: new Date().toISOString()
+      cliente_id: realClienteId,
+      nome,
+      posologia: posologia || null,
+      horarios: Array.isArray(horarios) ? JSON.stringify(horarios) : (horarios || null),
+      data_inicio: formatToMysqlDate(data_inicio) || new Date().toISOString().split('T')[0],
+      data_fim: formatToMysqlDate(data_fim),
+      observacoes: observacoes || null,
+      email_lembrete: email_lembrete || null,
+      efeitos: efeitos || null,
+      ativo: 1,
+      criado_em: mysqlDate
     };
-    let inserted;
+
+    let insertedId;
     try {
       const [id] = await db('medicamentos').insert(novo);
-      inserted = { id, ...novo };
-    } catch {
-      inserted = await dbHelper.query('medicamentos', 'insert', novo);
+      insertedId = id;
+    } catch (dbErr) {
+      console.warn('Fallback knex insert medicamentos:', dbErr.message);
+      const resQuery = await dbHelper.query('medicamentos', 'insert', novo);
+      insertedId = Array.isArray(resQuery) ? resQuery[0] : resQuery;
     }
 
-    // Enviar e-mail de lembrete se informado
+    if (efeitos) {
+      await db('efeitos_medicamentos').insert({
+        medicamento_id: insertedId,
+        efeito: efeitos,
+        criado_em: mysqlDate
+      }).catch(() => {});
+    }
+
     if (email_lembrete) {
       sendReminderEmail(email_lembrete, nome, horarios).catch(console.error);
     }
 
-    return res.status(201).json(inserted);
+    return res.status(201).json({ id: insertedId, ...novo });
   } catch (err) {
-    return res.status(500).json({ error: 'Erro ao cadastrar medicamento' });
+    console.error('Erro em createMedication:', err);
+    return res.status(500).json({ error: 'Erro ao cadastrar medicamento: ' + err.message });
   }
 };
 
 const updateMedication = async (req, res) => {
   const { id } = req.params;
-  const data = req.body;
+  const { nome, posologia, horarios, data_inicio, data_fim, observacoes, email_lembrete, efeitos } = req.body;
   try {
+    const mId = parseInt(id);
+    const mysqlDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const updateData = {
+      nome,
+      posologia: posologia || null,
+      horarios: Array.isArray(horarios) ? JSON.stringify(horarios) : (horarios || null),
+      data_inicio: formatToMysqlDate(data_inicio) || new Date().toISOString().split('T')[0],
+      data_fim: formatToMysqlDate(data_fim),
+      observacoes: observacoes || null,
+      email_lembrete: email_lembrete || null,
+      efeitos: efeitos || null
+    };
+
     try {
-      await db('medicamentos').where({ id }).update(data);
-    } catch {
-      await dbHelper.query('medicamentos', 'update', { id, ...data });
+      await db('medicamentos').where({ id: mId }).update(updateData);
+    } catch (dbErr) {
+      console.warn('Fallback knex update medicamentos:', dbErr.message);
+      await dbHelper.query('medicamentos', 'update', { id: mId }, updateData);
     }
-    return res.json({ message: 'Medicamento atualizado' });
+
+    if (efeitos) {
+      await db('efeitos_medicamentos').insert({
+        medicamento_id: mId,
+        efeito: efeitos,
+        criado_em: mysqlDate
+      }).catch(() => {});
+    }
+
+    return res.json({ message: 'Medicamento atualizado com sucesso' });
   } catch (err) {
-    return res.status(500).json({ error: 'Erro ao atualizar medicamento' });
+    console.error('Erro em updateMedication:', err);
+    return res.status(500).json({ error: 'Erro ao atualizar medicamento: ' + err.message });
   }
 };
 

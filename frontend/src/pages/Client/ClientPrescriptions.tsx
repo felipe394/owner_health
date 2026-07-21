@@ -38,42 +38,44 @@ export const ClientPrescriptions: React.FC = () => {
     } catch { setList([]); } finally { setLoading(false); }
   };
 
-  // Simular processamento de OCR pela IA do Owner Health
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Leitura Real de Arquivo e IA (OCR)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
     setOcrLoading(true);
     setExtractedOcrText('');
     
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      // Simula 1.6s de processamento
-      setTimeout(() => {
-        const fileLower = file.name.toLowerCase();
-        let doctor = 'Dra. Julia Alencar';
-        let medList = ['Dipirona 500mg - Tomar 1 comprimido de 6/6h se houver dor ou febre.', 'Amoxicilina 500mg - Tomar 1 cápsula a cada 8 horas por 7 dias.'];
-        let ocrText = "RECEITUÁRIO MÉDICO\n--------------------------------\nEMITENTE: DRA. JULIA ALENCAR (CRM-SP 654321)\nPACIENTE: Beneficiário Owner Health\n\nPRESCRIÇÃO:\n- Dipirona 500mg (12 comprimidos)\n  Uso oral. 1 comp de 6/6h se dor/febre.\n\n- Amoxicilina 500mg (21 cápsulas)\n  Uso oral. 1 cap de 8/8h por 7 dias (Uso contínuo).";
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
 
-        if (fileLower.includes('pressão') || fileLower.includes('pressao') || fileLower.includes('losartana')) {
-          doctor = 'Dr. Roberto Santos';
-          medList = ['Losartana Potássica 50mg - Tomar 1 comprimido em jejum pela manhã.'];
-          ocrText = "RECEITUÁRIO MÉDICO\n--------------------------------\nEMITENTE: DR. ROBERTO SANTOS (CRM-SP 123456)\nPACIENTE: Beneficiário Owner Health\n\nPRESCRIÇÃO:\n- Losartana Potássica 50mg (30 comprimidos)\n  Uso oral. Tomar 1 comprimido ao dia pela manhã, em jejum.";
-        }
+      const uploadRes = await fetch(`${API_URL}/api/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
 
-        setForm(f => ({
-          ...f,
-          medico: doctor,
-          observacoes: '',
-          arquivo_url: reader.result as string
-        }));
-        setMedicamentosList(medList);
+      if (!uploadRes.ok) throw new Error('Falha no upload do arquivo');
+      const uploadData = await uploadRes.json();
+      
+      const fileUrl = uploadData.url;
+      const realExtractedText = uploadData.extractedText || '';
+      
+      setForm(f => ({
+        ...f,
+        arquivo_url: fileUrl,
+        observacoes: f.observacoes || (realExtractedText ? `[Leitura IA do Arquivo]: ${realExtractedText.slice(0, 200)}...` : `[Arquivo Anexado]: ${file.name}`)
+      }));
 
-        setExtractedOcrText(ocrText);
-        setOcrLoading(false);
-      }, 1600);
-    };
-    reader.readAsDataURL(file);
+      setExtractedOcrText(
+        `📄 LEITURA PROCESSADA DO ARQUIVO REAL (${file.name})\n----------------------------------------\n${realExtractedText}\n----------------------------------------\nURL Registrada: ${fileUrl}`
+      );
+    } catch (err: any) {
+      alert(err.message || 'Erro ao realizar upload do arquivo.');
+    } finally {
+      setOcrLoading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -197,16 +199,27 @@ export const ClientPrescriptions: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={() => {
-                        const isPdf = item.arquivo_url?.startsWith('data:application/pdf');
-                        setViewingFile({ url: item.arquivo_url!, type: isPdf ? 'pdf' : 'image' });
+                        const fullUrl = item.arquivo_url?.startsWith('http') || item.arquivo_url?.startsWith('data:')
+                          ? item.arquivo_url!
+                          : `${API_URL}${item.arquivo_url}`;
+                        const isPdf = item.arquivo_url?.toLowerCase().includes('.pdf') || item.arquivo_url?.startsWith('data:application/pdf');
+                        setViewingFile({ url: fullUrl, type: isPdf ? 'pdf' : 'image' });
                       }}
-                      className="flex items-center gap-1 text-xs font-bold text-slate-500 hover:text-slate-700 transition"
+                      className="flex items-center gap-1 text-xs font-bold text-slate-600 hover:text-indigo-600 transition cursor-pointer"
                     >
-                      <Eye className="w-3.5 h-3.5" /> Ver
+                      <Eye className="w-3.5 h-3.5 text-indigo-500" /> Ver
                     </button>
-                    <a href={item.arquivo_url} download={`receita${item.arquivo_url?.startsWith('data:application/pdf') ? '.pdf' : '.png'}`} className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline">
+                    <button
+                      onClick={() => {
+                        const fullUrl = item.arquivo_url?.startsWith('http') || item.arquivo_url?.startsWith('data:')
+                          ? item.arquivo_url!
+                          : `${API_URL}${item.arquivo_url}`;
+                        window.open(fullUrl, '_blank');
+                      }}
+                      className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:underline cursor-pointer"
+                    >
                       <Download className="w-3.5 h-3.5" /> Baixar
-                    </a>
+                    </button>
                   </div>
                 </div>
               )}

@@ -292,23 +292,9 @@ export const CompanyHealthPlans: React.FC = () => {
                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Nome do Plano *</label>
                 <input required type="text" placeholder="Ex: Unimed Ouro Flex" value={newPlanForm.plano} onChange={e => setNewPlanForm({...newPlanForm, plano: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 transition" />
               </div>
-                            <div>
+              <div>
                 <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Produto/Segmentação</label>
-                <input type="text" placeholder="Ex: Enfermaria" value={newPlanForm.produto} onChange={e => setNewPlanForm({...newPlanForm, produto: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 transition" />
-              </div>
-                            <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Valor do Plano / Contrato (R$)</label>
-                <input type="number" step="0.01" placeholder="Ex: 299.90" value={newPlanForm.valor_plano} onChange={e => setNewPlanForm({...newPlanForm, valor_plano: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 transition" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Valor Consulta (R$)</label>
-                  <input type="number" step="0.01" placeholder="Ex: 100.00" value={newPlanForm.valor_consulta} onChange={e => setNewPlanForm({...newPlanForm, valor_consulta: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 transition" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">Valor Exames (R$)</label>
-                  <input type="number" step="0.01" placeholder="Ex: 50.00" value={newPlanForm.valor_exame} onChange={e => setNewPlanForm({...newPlanForm, valor_exame: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 transition" />
-                </div>
+                <input type="text" placeholder="Ex: Enfermaria / Ambulatorial" value={newPlanForm.produto} onChange={e => setNewPlanForm({...newPlanForm, produto: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 transition" />
               </div>
               <button type="submit" disabled={newPlanLoading} className="w-full py-3 mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5">
                 {newPlanLoading ? 'Criando...' : 'Salvar Plano'}

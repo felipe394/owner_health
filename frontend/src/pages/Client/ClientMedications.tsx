@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Pill, Trash2, X, Loader2, Bell, BellOff, Check, AlertCircle, Clock, Calendar, Search, MapPin, History, Minus } from 'lucide-react';
+import { Plus, Pill, Trash2, X, Loader2, Bell, BellOff, Check, AlertCircle, Clock, Calendar, Search, MapPin, History, Minus, Edit } from 'lucide-react';
 import { API_URL } from '../../config';
 
 interface Medication {
   id: number; nome: string; posologia?: string; horarios?: string;
   data_inicio?: string; data_fim?: string; observacoes?: string;
-  email_lembrete?: string; ativo: boolean;
+  email_lembrete?: string; efeitos?: string; ativo: boolean;
 }
 
 interface MedLog { id: number; medicamento_id: number; data: string; tomou: boolean; efeitos?: string; }
@@ -24,7 +24,9 @@ export const ClientMedications: React.FC = () => {
   const [meds, setMeds] = useState<Medication[]>([]);
   const [logs, setLogs] = useState<Record<number, MedLog[]>>({});
   
-  // States para aba Efeitos
+  // States para aba Efeitos e Edição
+  const [editingMedId, setEditingMedId] = useState<number | null>(null);
+  const [efeitosIniciais, setEfeitosIniciais] = useState('');
   const [selectedMedForEffect, setSelectedMedForEffect] = useState<string>('');
   const [newEffectText, setNewEffectText] = useState('');
   const [medEffectsHistory, setMedEffectsHistory] = useState<any[]>([]);
@@ -49,7 +51,23 @@ export const ClientMedications: React.FC = () => {
   const [searchedPrices, setSearchedPrices] = useState<PriceSimulation[]>([]);
   const [pushEnabled, setPushEnabled] = useState(false);
 
-  const clienteId = localStorage.getItem('activeProfileId');
+  const getActiveClienteId = () => {
+    const pId = localStorage.getItem('activeProfileId');
+    if (pId && pId !== 'null' && pId !== 'undefined') return pId;
+    const uRaw = localStorage.getItem('user');
+    if (uRaw) {
+      try {
+        const u = JSON.parse(uRaw);
+        if (u.cliente_id) return String(u.cliente_id);
+        if (u.id) return String(u.id);
+      } catch {}
+    }
+    const cId = localStorage.getItem('clienteId');
+    if (cId && cId !== 'null' && cId !== 'undefined') return cId;
+    return '1';
+  };
+
+  const clienteId = getActiveClienteId();
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const today = new Date().toISOString().split('T')[0];
@@ -87,20 +105,51 @@ export const ClientMedications: React.FC = () => {
     } catch { setMeds([]); } finally { setLoading(false); }
   };
 
+  const handleEdit = (med: Medication) => {
+    setEditingMedId(med.id);
+    setForm({
+      nome: med.nome,
+      posologia: med.posologia || '',
+      data_inicio: med.data_inicio || today,
+      data_fim: med.data_fim || '',
+      observacoes: med.observacoes || '',
+      email_lembrete: med.email_lembrete || '',
+    });
+    const hList = typeof med.horarios === 'string' && med.horarios.startsWith('[')
+      ? JSON.parse(med.horarios) : (med.horarios ? [med.horarios] : ['08:00']);
+    setHorariosList(hList.length > 0 ? hList : ['08:00']);
+    setEfeitosIniciais(med.efeitos || '');
+    setShowModal(true);
+  };
+
   const handleSave = async () => {
     if (!form.nome) { setError('Nome é obrigatório'); return; }
     if (form.data_fim && form.data_fim < form.data_inicio) { setError('A data de término não pode ser anterior à data de início.'); return; }
     if (form.email_lembrete && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(form.email_lembrete)) { setError('E-mail inválido.'); return; }
     setSaving(true); setError('');
     try {
-      const payload = { ...form, horarios: horariosList.filter(h => h.trim() !== '') };
-      const res = await fetch(`${API_URL}/api/medications/client/${clienteId}`, {
-        method: 'POST', headers, body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error('Erro ao salvar');
+      const payload = {
+        ...form,
+        efeitos: efeitosIniciais.trim(),
+        horarios: horariosList.filter(h => h.trim() !== '')
+      };
+      if (editingMedId) {
+        const res = await fetch(`${API_URL}/api/medications/${editingMedId}`, {
+          method: 'PUT', headers, body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Erro ao atualizar medicamento');
+      } else {
+        const res = await fetch(`${API_URL}/api/medications/client/${clienteId}`, {
+          method: 'POST', headers, body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Erro ao salvar');
+      }
+
       setShowModal(false);
+      setEditingMedId(null);
       setForm({ nome: '', posologia: '', data_inicio: today, data_fim: '', observacoes: '', email_lembrete: '' });
       setHorariosList(['08:00']);
+      setEfeitosIniciais('');
       fetchMeds();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Erro');
@@ -358,6 +407,12 @@ export const ClientMedications: React.FC = () => {
                             <h3 className="font-black text-slate-800 text-sm">{med.nome}</h3>
                             {med.posologia && <p className="text-xs text-slate-500 font-medium">{med.posologia}</p>}
                             {med.observacoes && <p className="text-[10px] text-slate-400 font-medium mt-1 italic leading-tight">{med.observacoes}</p>}
+                            {med.efeitos && (
+                              <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60">
+                                <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                                <span>Efeito: {med.efeitos}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
@@ -378,6 +433,13 @@ export const ClientMedications: React.FC = () => {
                               {reminderSending === med.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
                             </button>
                           )}
+                          <button
+                            onClick={() => handleEdit(med)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                            title="Editar Medicamento"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
                           <button onClick={() => handleDelete(med.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -670,13 +732,15 @@ export const ClientMedications: React.FC = () => {
         </div>
       )}
 
-      {/* Modal Novo Medicamento */}
+      {/* Modal Novo/Editar Medicamento */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-fadeIn">
             <div className="flex items-center justify-between p-6 border-b border-slate-100">
-              <h3 className="text-lg font-black text-slate-800">Novo Medicamento</h3>
-              <button onClick={() => setShowModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+              <h3 className="text-lg font-black text-slate-800">
+                {editingMedId ? 'Editar Medicamento' : 'Novo Medicamento'}
+              </h3>
+              <button onClick={() => { setShowModal(false); setEditingMedId(null); }}><X className="w-5 h-5 text-slate-400" /></button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
@@ -731,6 +795,16 @@ export const ClientMedications: React.FC = () => {
                 </div>
               </div>
               <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1.5">Anotar Efeito Colateral Inicial (Opcional)</label>
+                <input
+                  type="text"
+                  value={efeitosIniciais}
+                  onChange={e => setEfeitosIniciais(e.target.value)}
+                  placeholder="Ex: Tontura leve nas primeiras doses, sonolência..."
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition"
+                />
+              </div>
+              <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1.5">Observações Adicionais (Livre)</label>
                 <textarea value={form.observacoes} onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
                   placeholder="Informações, efeitos observados ou detalhes abertos para escrever..." rows={2} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition resize-none" />
@@ -742,10 +816,10 @@ export const ClientMedications: React.FC = () => {
               </div>
             </div>
             <div className="p-6 border-t border-slate-100 flex gap-3">
-              <button onClick={() => setShowModal(false)} className="flex-1 py-3 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition">Cancelar</button>
+              <button onClick={() => { setShowModal(false); setEditingMedId(null); }} className="flex-1 py-3 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition">Cancelar</button>
               <button type="submit" disabled={saving} className="flex-1 py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2"
                 style={{ background: 'linear-gradient(135deg, #1d4ed8, #2563eb)' }}>
-                {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</> : 'Salvar'}
+                {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</> : (editingMedId ? 'Atualizar Medicamento' : 'Salvar')}
               </button>
             </div>
             </form>

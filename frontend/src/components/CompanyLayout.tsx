@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { API_URL } from '../config';
 import { ProfileModal } from './ProfileModal';
+import { NotificationBell } from './NotificationBell';
 
 interface CompanyLayoutProps {
   children: React.ReactNode;
@@ -238,11 +239,14 @@ export const CompanyLayout: React.FC<CompanyLayoutProps> = ({ children }) => {
                 <span>Licença Pendente de Pagamento</span>
               </span>
             )}
-            <div className="hidden md:flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500">Clínica: </span>
-              <span className="text-xs font-black bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full capitalize">
-                {companyName}
-              </span>
+            <div className="hidden md:flex items-center gap-4">
+              <NotificationBell />
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500">Clínica: </span>
+                <span className="text-xs font-black bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full capitalize">
+                  {companyName}
+                </span>
+              </div>
             </div>
           </div>
         </header>

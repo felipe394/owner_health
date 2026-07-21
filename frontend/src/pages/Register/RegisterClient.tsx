@@ -1,5 +1,5 @@
 import { isValidCPF, formatCPF, formatCelular } from '../../utils/validators';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User, Mail, Lock, Eye, EyeOff, MapPin, Phone, CreditCard,
@@ -22,8 +22,17 @@ export const RegisterClient: React.FC = () => {
     nome: '', cpf: '', data_nascimento: '', email: '', celular: '',
     cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', estado: '',
     plano_empresa: '', plano_nome: '', plano_produto: '', plano_numero_carteirinha: '',
-    senha: '', confirmar_senha: '', acceptLGPD: false,
+    senha: '', confirmar_senha: '', acceptLGPD: false, empresa_id: '',
   });
+
+  const [companies, setCompanies] = useState<{id: number, nome_fantasia: string}[]>([]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/companies/public`)
+      .then(res => res.json())
+      .then(data => setCompanies(data))
+      .catch(err => console.error('Erro ao carregar empresas:', err));
+  }, []);
 
   const sf = (field: string, value: string | boolean) =>
     setForm(prev => ({ ...prev, [field]: value }));
@@ -179,6 +188,21 @@ export const RegisterClient: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <F label="Nome Completo *" id="nome" value={form.nome} onChange={v => sf('nome', v)}
                   icon={<User className="w-4 h-4" />} placeholder="Seu nome completo" colSpan />
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Clínica/Empresa (Opcional)</label>
+                  <select
+                    value={form.empresa_id}
+                    onChange={(e) => sf('empresa_id', e.target.value)}
+                    className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-base md:text-sm font-medium focus:outline-none focus:border-blue-500 transition text-slate-700"
+                  >
+                    <option value="">Nenhuma / Sou paciente avulso</option>
+                    {companies.map(c => (
+                      <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <F label="CPF *" id="cpf" value={form.cpf} isValid={form.cpf ? isValidCPF(form.cpf) : null} onChange={v => sf('cpf', formatCPF(v))}

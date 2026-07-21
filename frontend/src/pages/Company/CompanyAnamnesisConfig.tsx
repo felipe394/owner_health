@@ -1,31 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus, Trash2, ChevronDown, ChevronUp, GripVertical, Settings,
-  Save, Copy, Check, Send, Sparkles, Eye, ClipboardList, X,
+  Save, Copy, Check, Send, Sparkles, Eye, ClipboardList,
   Type, AlignLeft, Circle, CheckSquare, List, BarChart3, Calendar,
   Loader2, AlertCircle, Edit3, ChevronRight
 } from 'lucide-react';
 import { API_URL } from '../../config';
+import { CompanyAnamnesisPreviewModal } from './CompanyAnamnesisPreviewModal';
+import { TemplatePreviewModal } from './TemplatePreviewModal';
+import { TemplateEditorModal } from './TemplateEditorModal';
+import { QuestionModal } from '../../components/QuestionModal';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type QuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | 'scale' | 'date';
+export type QuestionType = 'text' | 'textarea' | 'radio' | 'checkbox' | 'select' | 'scale' | 'date';
 
-interface Option { id?: number; texto: string; ordem: number; }
-interface Question {
+export interface Option { id?: number; texto: string; ordem: number; }
+export interface Question {
   id?: number; section_id?: number; texto: string; tipo: QuestionType;
   obrigatoria: boolean; ordem: number; placeholder: string; descricao: string;
   escala_min?: number; escala_max?: number; escala_label_min?: string; escala_label_max?: string;
+  parent_option_id?: number;
   options?: Option[]; _loading?: boolean;
 }
-interface Section {
+export interface Section {
   id?: number; empresa_id?: number; titulo: string; descricao: string;
   ordem: number; ativo: boolean; questions?: Question[]; _open?: boolean;
 }
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const QUESTION_TYPES: { value: QuestionType; label: string; icon: React.ReactNode; desc: string }[] = [
+export const QUESTION_TYPES: { value: QuestionType; label: string; icon: React.ReactNode; desc: string }[] = [
   { value: 'text',     label: 'Resposta curta',    icon: <Type className="w-4 h-4" />,         desc: 'Texto de uma linha' },
   { value: 'textarea', label: 'Parágrafo',         icon: <AlignLeft className="w-4 h-4" />,    desc: 'Texto longo' },
   { value: 'radio',    label: 'Múltipla escolha',  icon: <Circle className="w-4 h-4" />,       desc: 'Escolha única' },
@@ -35,7 +40,7 @@ const QUESTION_TYPES: { value: QuestionType; label: string; icon: React.ReactNod
   { value: 'date',     label: 'Data',              icon: <Calendar className="w-4 h-4" />,     desc: 'Seletor de data' },
 ];
 
-const QUESTION_TYPE_MAP: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
+export const QUESTION_TYPE_MAP: Record<QuestionType, { label: string; icon: React.ReactNode }> = {
   text:     { label: 'Resposta curta',    icon: <Type className="w-3.5 h-3.5" /> },
   textarea: { label: 'Parágrafo',         icon: <AlignLeft className="w-3.5 h-3.5" /> },
   radio:    { label: 'Múltipla escolha',  icon: <Circle className="w-3.5 h-3.5" /> },
@@ -45,206 +50,7 @@ const QUESTION_TYPE_MAP: Record<QuestionType, { label: string; icon: React.React
   date:     { label: 'Data',              icon: <Calendar className="w-3.5 h-3.5" /> },
 };
 
-const needsOptions = (tipo: QuestionType) => ['radio', 'checkbox', 'select'].includes(tipo);
-
-// ─── Modal de edição de pergunta ──────────────────────────────────────────────
-
-interface QuestionModalProps {
-  question: Question | null;
-  sectionId: number;
-  onSave: (q: Question) => void;
-  onClose: () => void;
-}
-
-const QuestionModal: React.FC<QuestionModalProps> = ({ question, sectionId, onSave, onClose }) => {
-  const [form, setForm] = useState<Question>(question || {
-    section_id: sectionId, texto: '', tipo: 'text', obrigatoria: false,
-    ordem: 0, placeholder: '', descricao: '', escala_min: 1, escala_max: 10,
-    escala_label_min: 'Mínimo', escala_label_max: 'Máximo', options: []
-  });
-  const [typeOpen, setTypeOpen] = useState(false);
-  const [options, setOptions] = useState<string[]>(
-    question?.options?.map(o => o.texto) || ['']
-  );
-
-  const sf = (key: keyof Question, val: unknown) => setForm(f => ({ ...f, [key]: val }));
-
-  const handleSave = () => {
-    const q = { ...form, options: options.filter(o => o.trim()).map((o, i) => ({ texto: o, ordem: i })) };
-    onSave(q);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(4px)' }}>
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
-              <Edit3 className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h2 className="text-base font-black text-slate-800">{question ? 'Editar Pergunta' : 'Nova Pergunta'}</h2>
-              <p className="text-xs text-slate-400 font-medium">Configure os detalhes da pergunta</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition">
-            <X className="w-4 h-4 text-slate-500" />
-          </button>
-        </div>
-
-        <div className="p-6 space-y-5">
-          {/* Enunciado */}
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5">Enunciado da pergunta *</label>
-            <input
-              value={form.texto}
-              onChange={e => sf('texto', e.target.value)}
-              placeholder="Ex: Qual é o motivo da sua consulta?"
-              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 transition bg-slate-50"
-            />
-          </div>
-
-          {/* Descrição/Subtítulo */}
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5">Descrição / Instrução (opcional)</label>
-            <input
-              value={form.descricao}
-              onChange={e => sf('descricao', e.target.value)}
-              placeholder="Ex: Marque todas que se aplicam"
-              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 transition bg-slate-50"
-            />
-          </div>
-
-          {/* Tipo */}
-          <div>
-            <label className="block text-xs font-bold text-slate-600 mb-1.5">Tipo de resposta</label>
-            <div className="relative">
-              <button
-                onClick={() => setTypeOpen(o => !o)}
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium bg-slate-50 flex items-center justify-between hover:border-violet-400 transition"
-              >
-                <span className="flex items-center gap-2 text-slate-700">
-                  {QUESTION_TYPE_MAP[form.tipo].icon}
-                  {QUESTION_TYPE_MAP[form.tipo].label}
-                </span>
-                <ChevronDown className="w-4 h-4 text-slate-400" />
-              </button>
-              {typeOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-20 overflow-hidden">
-                  {QUESTION_TYPES.map(t => (
-                    <button key={t.value} onClick={() => { sf('tipo', t.value); setTypeOpen(false); }}
-                      className={`w-full px-4 py-3 text-left flex items-center gap-3 hover:bg-slate-50 transition ${form.tipo === t.value ? 'bg-violet-50' : ''}`}>
-                      <span className={`text-sm ${form.tipo === t.value ? 'text-violet-600' : 'text-slate-500'}`}>{t.icon}</span>
-                      <span>
-                        <span className={`block text-xs font-bold ${form.tipo === t.value ? 'text-violet-700' : 'text-slate-700'}`}>{t.label}</span>
-                        <span className="block text-[10px] text-slate-400">{t.desc}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Placeholder (text/textarea) */}
-          {(form.tipo === 'text' || form.tipo === 'textarea') && (
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1.5">Texto de exemplo (placeholder)</label>
-              <input
-                value={form.placeholder}
-                onChange={e => sf('placeholder', e.target.value)}
-                placeholder="Ex: Digite sua resposta aqui..."
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 transition bg-slate-50"
-              />
-            </div>
-          )}
-
-          {/* Escala linear */}
-          {form.tipo === 'scale' && (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Valor mínimo</label>
-                <input type="number" value={form.escala_min} onChange={e => sf('escala_min', Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 transition bg-slate-50" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Valor máximo</label>
-                <input type="number" value={form.escala_max} onChange={e => sf('escala_max', Number(e.target.value))}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 transition bg-slate-50" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Rótulo do mínimo</label>
-                <input value={form.escala_label_min} onChange={e => sf('escala_label_min', e.target.value)}
-                  placeholder="Ex: Sem dor" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 transition bg-slate-50" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1.5">Rótulo do máximo</label>
-                <input value={form.escala_label_max} onChange={e => sf('escala_label_max', e.target.value)}
-                  placeholder="Ex: Dor insuportável" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 transition bg-slate-50" />
-              </div>
-            </div>
-          )}
-
-          {/* Opções (radio/checkbox/select) */}
-          {needsOptions(form.tipo) && (
-            <div>
-              <label className="block text-xs font-bold text-slate-600 mb-2">Opções de resposta</label>
-              <div className="space-y-2">
-                {options.map((opt, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full border-2 border-slate-300 flex-shrink-0" />
-                    <input
-                      value={opt}
-                      onChange={e => { const n = [...options]; n[idx] = e.target.value; setOptions(n); }}
-                      placeholder={`Opção ${idx + 1}`}
-                      className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/10 transition bg-slate-50"
-                    />
-                    {options.length > 1 && (
-                      <button onClick={() => setOptions(o => o.filter((_, i) => i !== idx))} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center transition">
-                        <X className="w-3.5 h-3.5 text-red-500" />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button onClick={() => setOptions(o => [...o, ''])}
-                  className="flex items-center gap-2 text-xs font-bold text-violet-600 hover:text-violet-700 mt-1 transition">
-                  <Plus className="w-3.5 h-3.5" /> Adicionar opção
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Obrigatória */}
-          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
-            <div>
-              <p className="text-sm font-bold text-slate-700">Resposta obrigatória</p>
-              <p className="text-xs text-slate-400 mt-0.5">O paciente não poderá avançar sem responder</p>
-            </div>
-            <button onClick={() => sf('obrigatoria', !form.obrigatoria)}
-              className={`w-12 h-6 rounded-full transition-all ${form.obrigatoria ? 'bg-violet-600' : 'bg-slate-300'}`}
-              style={{ position: 'relative' }}>
-              <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${form.obrigatoria ? 'left-6' : 'left-0.5'}`} />
-            </button>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-slate-100">
-          <button onClick={onClose} className="flex-1 py-3 rounded-xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition">
-            Cancelar
-          </button>
-          <button onClick={handleSave}
-            disabled={!form.texto.trim()}
-            className="flex-1 py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition disabled:opacity-50"
-            style={{ background: form.texto.trim() ? 'linear-gradient(135deg, #6366f1, #8b5cf6)' : undefined }}>
-            <Save className="w-4 h-4" /> Salvar Pergunta
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+export const needsOptions = (tipo: QuestionType) => ['radio', 'checkbox', 'select'].includes(tipo);
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -258,10 +64,20 @@ export const CompanyAnamnesisConfig: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const [tab, setTab] = useState<'builder' | 'responses'>('builder');
-  const [modalQuestion, setModalQuestion] = useState<{ question: Question | null; sectionIdx: number } | null>(null);
+  const [tab, setTab] = useState<'builder' | 'responses' | 'templates'>('builder');
+  
+  // ── Modals / States ──
+  const [modalQuestion, setModalQuestion] = useState<{ question: Question | null; sectionIdx: number; parentOptionId?: number } | null>(null);
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [addingSectionIdx, setAddingSectionIdx] = useState<number | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewingTemplate, setPreviewingTemplate] = useState<any | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
+  
+  // Templates state
+  const [templates, setTemplates] = useState<{ id: number; titulo?: string; nome?: string; criado_em: string; conteudo?: any; sections_data?: any }[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
   const nextId = useRef(1000);
@@ -272,6 +88,11 @@ export const CompanyAnamnesisConfig: React.FC = () => {
 
   const loadForm = async () => {
     setLoading(true);
+    await loadFormSilent();
+    setLoading(false);
+  };
+
+  const loadFormSilent = async () => {
     try {
       const res = await fetch(`${API_URL}/api/anamnesis/form/${companyId}`, { headers });
       if (!res.ok) throw new Error('Falha');
@@ -279,7 +100,160 @@ export const CompanyAnamnesisConfig: React.FC = () => {
       setSections(data.map(s => ({ ...s, _open: true, questions: s.questions || [] })));
     } catch {
       setSections([]);
-    } finally { setLoading(false); }
+    }
+  };
+
+  const loadTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      const res = await fetch(`${API_URL}/api/anamnesis-templates/${companyId}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setTemplates(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  useEffect(() => {
+    if (tab === 'templates') {
+      loadTemplates();
+    }
+  }, [tab]);
+
+  const handleSaveTemplate = async () => {
+    const title = window.prompt('Digite um nome para este modelo de formulário:', 'Meu Modelo de Anamnese');
+    if (!title) return;
+    
+    setSavingTemplate(true);
+    try {
+      // Limpar IDs e dados sensíveis antes de salvar como modelo
+      const cleanSections = sections.map(s => ({
+        titulo: s.titulo,
+        descricao: s.descricao,
+        ordem: s.ordem,
+        questions: (s.questions || []).map(q => ({
+          texto: q.texto,
+          tipo: q.tipo,
+          obrigatoria: q.obrigatoria,
+          ordem: q.ordem,
+          placeholder: q.placeholder,
+          descricao: q.descricao,
+          escala_min: q.escala_min,
+          escala_max: q.escala_max,
+          escala_label_min: q.escala_label_min,
+          escala_label_max: q.escala_label_max,
+          // Guardar temporary IDs para parent_option_id mapping
+          _temp_id: q.id, 
+          parent_option_id: q.parent_option_id,
+          options: (q.options || []).map(o => ({
+            texto: o.texto,
+            ordem: o.ordem,
+            _temp_id: o.id
+          }))
+        }))
+      }));
+
+      const res = await fetch(`${API_URL}/api/anamnesis-templates`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ empresa_id: companyId, titulo: title, conteudo: cleanSections })
+      });
+      if (res.ok) {
+        alert('Modelo salvo com sucesso!');
+        loadTemplates();
+      } else {
+        throw new Error('Erro ao salvar');
+      }
+    } catch (e) {
+      alert('Erro ao salvar modelo.');
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  const handleLoadTemplate = async (templateId: number) => {
+    if (!window.confirm('Carregar este modelo irá SOBRESCREVER o formulário atual inteiro. Deseja continuar?')) return;
+    
+    setLoading(true);
+    try {
+      const template = templates.find(t => t.id === templateId);
+      if (!template) return;
+      
+      const conteudo = template.conteudo;
+      
+      // Apagar tudo primeiro
+      for (const s of sections) {
+        if (s.id) await fetch(`${API_URL}/api/anamnesis/sections/${s.id}`, { method: 'DELETE', headers });
+      }
+
+      // Reconstruir o formulário a partir do JSON (um a um ou bulk)
+      // Como o construtor permite criar no frontend e sincronizar, 
+      // podemos apenas fazer as chamadas de API de criação para cada seção
+      for (let si = 0; si < conteudo.length; si++) {
+        const s = conteudo[si];
+        const sRes = await fetch(`${API_URL}/api/anamnesis/empresa/${companyId}/sections`, {
+          method: 'POST', headers, body: JSON.stringify({ titulo: s.titulo, descricao: s.descricao, ordem: s.ordem, ativo: true })
+        });
+        const createdS = await sRes.json();
+        
+        const oldToNewOptions = new Map();
+
+        // 1. Criar perguntas parentes e suas opções
+        for (const q of s.questions) {
+          const qRes = await fetch(`${API_URL}/api/anamnesis/sections/${createdS.id}/questions`, {
+            method: 'POST', headers, body: JSON.stringify({ ...q, parent_option_id: null })
+          });
+          const createdQ = await qRes.json();
+          
+          if (needsOptions(q.tipo) && q.options?.length) {
+            const optsRes = await fetch(`${API_URL}/api/anamnesis/questions/${createdQ.id}/options/bulk`, {
+              method: 'PUT', headers, body: JSON.stringify({ options: q.options })
+            });
+            const createdOpts = await optsRes.json();
+            
+            // Map old _temp_id to new option ID
+            if (createdOpts && Array.isArray(createdOpts)) {
+              for (let i = 0; i < q.options.length; i++) {
+                if (q.options[i]._temp_id && createdOpts[i]?.id) {
+                  oldToNewOptions.set(q.options[i]._temp_id, createdOpts[i].id);
+                }
+              }
+            }
+          }
+          
+          // Se for pergunta com parent, precisamos atualizar o parent_option_id depois
+          if (q.parent_option_id) {
+             const newParentOptId = oldToNewOptions.get(q.parent_option_id);
+             if (newParentOptId) {
+                await fetch(`${API_URL}/api/anamnesis/questions/${createdQ.id}`, {
+                  method: 'PUT', headers, body: JSON.stringify({ ...q, parent_option_id: newParentOptId })
+                });
+             }
+          }
+        }
+      }
+      await loadFormSilent();
+      alert('Modelo carregado com sucesso!');
+      setTab('builder');
+    } catch (e) {
+      alert('Erro ao carregar modelo. O formulário pode estar incompleto.');
+      await loadFormSilent();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: number) => {
+    if (!window.confirm('Deseja realmente excluir este modelo?')) return;
+    try {
+      await fetch(`${API_URL}/api/anamnesis-templates/${templateId}`, { method: 'DELETE', headers });
+      loadTemplates();
+    } catch (e) {
+      alert('Erro ao excluir modelo.');
+    }
   };
 
   // ── Seções ──────────────────────────────────────────────────────────────────
@@ -325,8 +299,8 @@ export const CompanyAnamnesisConfig: React.FC = () => {
 
   // ── Perguntas ────────────────────────────────────────────────────────────────
 
-  const handleAddQuestion = (sIdx: number) => {
-    setModalQuestion({ question: null, sectionIdx: sIdx });
+  const handleAddQuestion = (sIdx: number, parentOptionId?: number) => {
+    setModalQuestion({ question: null, sectionIdx: sIdx, parentOptionId });
   };
 
   const handleEditQuestion = (sIdx: number, qIdx: number) => {
@@ -355,7 +329,7 @@ export const CompanyAnamnesisConfig: React.FC = () => {
       if (isEdit) {
         // Atualiza pergunta
         await fetch(`${API_URL}/api/anamnesis/questions/${q.id}`, {
-          method: 'PUT', headers, body: JSON.stringify(q)
+          method: 'PUT', headers, body: JSON.stringify({ ...q, parent_option_id: modalQuestion?.parentOptionId || q.parent_option_id })
         });
         // Atualiza opções
         if (needsOptions(q.tipo)) {
@@ -363,13 +337,11 @@ export const CompanyAnamnesisConfig: React.FC = () => {
             method: 'PUT', headers, body: JSON.stringify({ options: q.options })
           });
         }
-        setSections(prev => prev.map((s, si) => si !== sectionIdx ? s : {
-          ...s, questions: s.questions!.map(existing => String(existing.id) === String(q.id) ? q : existing)
-        }));
+        await loadFormSilent();
       } else {
         // Cria pergunta
         const res = await fetch(`${API_URL}/api/anamnesis/sections/${sectionId}/questions`, {
-          method: 'POST', headers, body: JSON.stringify(q)
+          method: 'POST', headers, body: JSON.stringify({ ...q, parent_option_id: modalQuestion?.parentOptionId || q.parent_option_id })
         });
         const created = await res.json();
         // Cria opções
@@ -378,13 +350,11 @@ export const CompanyAnamnesisConfig: React.FC = () => {
             method: 'PUT', headers, body: JSON.stringify({ options: q.options })
           });
         }
-        setSections(prev => prev.map((s, si) => si !== sectionIdx ? s : {
-          ...s, questions: [...(s.questions || []), { ...created, ...q, options: q.options }]
-        }));
+        await loadFormSilent();
       }
     } catch {
       // Fallback local
-      const localQ = { ...q, id: q.id || genId(), section_id: sectionId };
+      const localQ = { ...q, id: q.id || genId(), section_id: sectionId, parent_option_id: modalQuestion?.parentOptionId };
       setSections(prev => prev.map((s, si) => si !== sectionIdx ? s : {
         ...s, questions: isEdit
           ? s.questions!.map(ex => String(ex.id) === String(q.id) ? localQ : ex)
@@ -478,6 +448,7 @@ export const CompanyAnamnesisConfig: React.FC = () => {
         <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
           {[
             { key: 'builder', label: 'Construtor', icon: <Edit3 className="w-3.5 h-3.5" /> },
+            { key: 'templates', label: 'Modelos Salvos', icon: <ClipboardList className="w-3.5 h-3.5" /> },
             { key: 'responses', label: 'Compartilhar', icon: <Send className="w-3.5 h-3.5" /> },
           ].map(t => (
             <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
@@ -506,6 +477,16 @@ export const CompanyAnamnesisConfig: React.FC = () => {
                       className="px-6 py-2.5 rounded-xl text-sm font-bold text-white transition"
                       style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
                       + Criar primeira seção
+                    </button>
+                  </div>
+                )}
+
+                {sections.length > 0 && (
+                  <div className="flex justify-end mb-4">
+                    <button onClick={handleSaveTemplate} disabled={savingTemplate}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 transition shadow-sm border border-violet-100 disabled:opacity-60">
+                      {savingTemplate ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Salvar como Modelo
                     </button>
                   </div>
                 )}
@@ -549,65 +530,91 @@ export const CompanyAnamnesisConfig: React.FC = () => {
                     {/* Perguntas */}
                     {section._open && (
                       <div className="p-4 space-y-3">
-                        {(section.questions || []).map((q, qIdx) => (
-                          <div key={qIdx} className="flex items-start gap-3 p-4 rounded-2xl border border-slate-100 bg-slate-50 hover:border-violet-200 hover:bg-violet-50/30 transition group">
-                            <div className="w-5 h-5 mt-0.5 flex-shrink-0 cursor-grab opacity-40 group-hover:opacity-70 transition">
-                              <GripVertical className="w-full h-full text-slate-400" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1">
-                                  <p className="text-sm font-bold text-slate-800 leading-snug">{q.texto}</p>
-                                  {q.descricao && <p className="text-xs text-slate-400 mt-0.5">{q.descricao}</p>}
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-shrink-0">
-                                  {q.obrigatoria && (
-                                    <span className="text-[9px] font-black uppercase text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded">obrig.</span>
-                                  )}
-                                  <span className="flex items-center gap-1 text-[10px] font-bold text-violet-600 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-full">
-                                    {QUESTION_TYPE_MAP[q.tipo].icon}
-                                    {QUESTION_TYPE_MAP[q.tipo].label}
-                                  </span>
-                                  <button onClick={() => handleEditQuestion(sIdx, qIdx)}
-                                    className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center hover:border-violet-400 transition">
-                                    <Edit3 className="w-3 h-3 text-slate-500" />
-                                  </button>
-                                  <button onClick={() => handleDeleteQuestion(sIdx, qIdx)}
-                                    className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center hover:border-red-400 hover:bg-red-50 transition">
-                                    <Trash2 className="w-3 h-3 text-slate-400" />
-                                  </button>
-                                </div>
-                              </div>
-                              {/* Preview mini das opções */}
-                              {needsOptions(q.tipo) && q.options && q.options.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5 mt-2">
-                                  {q.options.slice(0, 4).map((o, oi) => (
-                                    <span key={oi} className="text-[10px] font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full">{o.texto}</span>
-                                  ))}
-                                  {q.options.length > 4 && (
-                                    <span className="text-[10px] font-medium text-slate-400">+{q.options.length - 4} opções</span>
-                                  )}
-                                </div>
-                              )}
-                              {q.tipo === 'scale' && (
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className="text-[10px] text-slate-400">{q.escala_label_min || 'Mín'}</span>
-                                  <div className="flex gap-1">
-                                    {Array.from({ length: Math.min((q.escala_max || 10) - (q.escala_min || 1) + 1, 10) }, (_, i) => (
-                                      <div key={i} className="w-5 h-5 rounded bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-500">
-                                        {(q.escala_min || 1) + i}
-                                      </div>
-                                    ))}
+                        {(() => {
+                          const topLevel = (section.questions || []).filter(q => !q.parent_option_id);
+                          const renderConfigQuestion = (q: Question, qIdx: number, level: number = 0) => {
+                            const activeChildren = (section.questions || []).filter(c => 
+                              c.parent_option_id != null && q.options?.some(o => o.id != null && String(c.parent_option_id) === String(o.id))
+                            );
+                            
+                            return (
+                              <div key={qIdx} className={`${level > 0 ? 'ml-8 mt-3 relative border-l-2 border-violet-200 pl-6' : ''}`}>
+                                <div className="flex items-start gap-3 p-4 rounded-2xl border border-slate-100 bg-slate-50 hover:border-violet-200 hover:bg-violet-50/30 transition group">
+                                  <div className="w-5 h-5 mt-0.5 flex-shrink-0 cursor-grab opacity-40 group-hover:opacity-70 transition">
+                                    <GripVertical className="w-full h-full text-slate-400" />
                                   </div>
-                                  <span className="text-[10px] text-slate-400">{q.escala_label_max || 'Máx'}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="flex-1">
+                                        <p className="text-sm font-bold text-slate-800 leading-snug">{q.texto}</p>
+                                        {q.descricao && <p className="text-xs text-slate-400 mt-0.5">{q.descricao}</p>}
+                                      </div>
+                                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                                        {q.obrigatoria && (
+                                          <span className="text-[9px] font-black uppercase text-red-500 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded">obrig.</span>
+                                        )}
+                                        <span className="flex items-center gap-1 text-[10px] font-bold text-violet-600 bg-violet-50 border border-violet-100 px-2 py-0.5 rounded-full">
+                                          {QUESTION_TYPE_MAP[q.tipo]?.icon}
+                                          {QUESTION_TYPE_MAP[q.tipo]?.label}
+                                        </span>
+                                        <button onClick={() => handleEditQuestion(sIdx, section.questions!.indexOf(q))}
+                                          className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center hover:border-violet-400 transition">
+                                          <Edit3 className="w-3 h-3 text-slate-500" />
+                                        </button>
+                                        <button onClick={() => handleDeleteQuestion(sIdx, section.questions!.indexOf(q))}
+                                          className="w-6 h-6 rounded-md bg-white border border-slate-200 flex items-center justify-center hover:border-red-400 hover:bg-red-50 transition">
+                                          <Trash2 className="w-3 h-3 text-slate-400" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Mostrar opções e permitir sub-pergunta */}
+                                    {needsOptions(q.tipo) && q.options && q.options.length > 0 && (
+                                      <div className="mt-3 space-y-1.5">
+                                        {q.options.map(o => {
+                                          const hasChild = (section.questions || []).some(c => c.parent_option_id != null && String(c.parent_option_id) === String(o.id));
+                                          return (
+                                            <div key={o.id} className="flex items-center justify-between gap-2 p-2 rounded-lg border border-slate-200 bg-white shadow-sm">
+                                              <span className="text-xs font-medium text-slate-600 px-1">{o.texto}</span>
+                                              {!hasChild ? (
+                                                <button onClick={() => handleAddQuestion(sIdx, Number(o.id))} className="text-[10px] font-bold text-violet-500 hover:text-violet-700 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded transition flex items-center gap-1">
+                                                  <Plus className="w-3 h-3" /> Step (Lógica)
+                                                </button>
+                                              ) : (
+                                                <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded flex items-center gap-1">
+                                                  <Check className="w-3 h-3" /> Step Vinculado
+                                                </span>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+
+                                    {q.tipo === 'scale' && (
+                                      <div className="flex items-center gap-2 mt-2">
+                                        <span className="text-[10px] text-slate-400">{q.escala_label_min || 'Mín'}</span>
+                                        <div className="flex gap-1">
+                                          {Array.from({ length: Math.min((q.escala_max || 10) - (q.escala_min || 1) + 1, 10) }, (_, i) => (
+                                            <div key={i} className="w-5 h-5 rounded bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-500">
+                                              {(q.escala_min || 1) + i}
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <span className="text-[10px] text-slate-400">{q.escala_label_max || 'Máx'}</span>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                                {activeChildren.map(c => renderConfigQuestion(c, section.questions!.indexOf(c), level + 1))}
+                              </div>
+                            );
+                          };
+                          return topLevel.map(q => renderConfigQuestion(q, section.questions!.indexOf(q)));
+                        })()}
                         <button onClick={() => handleAddQuestion(sIdx)}
                           className="w-full py-3 rounded-2xl border-2 border-dashed border-violet-200 text-sm font-bold text-violet-500 hover:border-violet-400 hover:bg-violet-50 transition flex items-center justify-center gap-2">
-                          <Plus className="w-4 h-4" /> Adicionar pergunta
+                          <Plus className="w-4 h-4" /> Adicionar pergunta principal
                         </button>
                       </div>
                     )}
@@ -645,7 +652,7 @@ export const CompanyAnamnesisConfig: React.FC = () => {
                   </button>
                 )}
               </>
-            ) : (
+            ) : tab === 'responses' ? (
               /* Aba de Compartilhamento */
               <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm space-y-6">
                 <div>
@@ -674,6 +681,54 @@ export const CompanyAnamnesisConfig: React.FC = () => {
                     </p>
                   </div>
                 </div>
+              </div>
+            ) : (
+              /* Aba de Modelos Salvos */
+              <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm space-y-6">
+                <div>
+                  <h3 className="text-base font-black text-slate-800 mb-1">Modelos de Formulário Salvos</h3>
+                  <p className="text-sm text-slate-500">Recupere estruturas de formulário prontas. Atenção: ao carregar um modelo, o formulário atual será substituído.</p>
+                </div>
+                {loadingTemplates ? (
+                  <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-violet-500" /></div>
+                ) : templates.length === 0 ? (
+                  <div className="text-center p-8 border border-dashed border-slate-200 rounded-2xl">
+                    <p className="text-sm text-slate-500">Nenhum modelo salvo ainda.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {templates.map(t => (
+                      <div key={t.id} className="flex items-center justify-between p-4 rounded-xl border border-slate-200 hover:border-violet-300 transition group bg-slate-50">
+                        <div>
+                          <p className="font-bold text-sm text-slate-800">{t.nome || t.titulo || 'Modelo de Anamnese'}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">Salvo em {new Date(t.criado_em).toLocaleString('pt-BR')}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setPreviewingTemplate(t)}
+                            className="text-xs font-bold px-3 py-1.5 bg-white border border-slate-200 rounded-lg hover:border-blue-400 hover:text-blue-600 transition"
+                            title="Visualizar"
+                          >
+                            👁️
+                          </button>
+                          <button onClick={() => setEditingTemplate(t)}
+                            className="text-xs font-bold px-3 py-1.5 bg-white border border-slate-200 rounded-lg hover:border-amber-400 hover:text-amber-600 transition"
+                            title="Editar"
+                          >
+                            ✏️
+                          </button>
+                          <button onClick={() => handleLoadTemplate(t.id)}
+                            className="text-xs font-bold px-3 py-1.5 bg-white border border-slate-200 rounded-lg hover:border-violet-400 hover:text-violet-600 transition">
+                            Carregar no Construtor
+                          </button>
+                          <button onClick={() => handleDeleteTemplate(t.id)}
+                            className="text-xs font-bold px-3 py-1.5 bg-white border border-slate-200 rounded-lg hover:border-red-400 hover:text-red-500 hover:bg-red-50 transition">
+                            Excluir
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -720,17 +775,34 @@ export const CompanyAnamnesisConfig: React.FC = () => {
             </div>
 
             {/* Preview link */}
-            <a href="/client/anamnesis" target="_blank" rel="noreferrer"
-              className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50/50 transition group shadow-sm">
+            <button onClick={() => setShowPreviewModal(true)}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50/50 transition group shadow-sm text-left">
               <div className="flex items-center gap-2">
                 <Eye className="w-4 h-4 text-violet-500" />
                 <span className="text-sm font-bold text-slate-700">Visualizar formulário</span>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-violet-400 transition" />
-            </a>
+            </button>
           </div>
         </div>
       </div>
+      {showPreviewModal && <CompanyAnamnesisPreviewModal sections={sections as any} onClose={() => setShowPreviewModal(false)} />}
+      {previewingTemplate && (
+        <TemplatePreviewModal
+          template={previewingTemplate}
+          onClose={() => setPreviewingTemplate(null)}
+        />
+      )}
+      {editingTemplate && (
+        <TemplateEditorModal
+          template={editingTemplate}
+          onClose={() => setEditingTemplate(null)}
+          onSaved={() => {
+            setEditingTemplate(null);
+            loadTemplates();
+          }}
+        />
+      )}
     </>
   );
 };

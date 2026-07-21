@@ -12,12 +12,15 @@ const {
   getAnamnesisConfig,
   updateAnamnesisConfig,
   getSharedPatientData,
-  createCompanyDocument
+  createCompanyDocument,
+  getCompanyDocuments,
+  getPublicCompanies
 } = require('../controllers/companyController');
 const { authenticateToken } = require('../middleware/auth');
 
 // Cadastro de empresa é público
 router.post('/register', registerCompany);
+router.get('/public', getPublicCompanies);
 
 // Rotas autenticadas
 router.get('/', authenticateToken, getCompanies);
@@ -38,6 +41,7 @@ router.put('/:id/anamnesis-config', authenticateToken, updateAnamnesisConfig);
 router.get('/:id/patient-data/:cpfOrCode', authenticateToken, getSharedPatientData);
 
 // Documentos (Receitas e Atestados)
+router.get('/:id/documents', authenticateToken, getCompanyDocuments);
 router.post('/:id/documents', authenticateToken, createCompanyDocument);
 
 module.exports = router;
