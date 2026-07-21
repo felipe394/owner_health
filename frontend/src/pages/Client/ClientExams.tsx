@@ -73,7 +73,13 @@ export const ClientExams: React.FC = () => {
     const fullUrl = url.startsWith('http') || url.startsWith('data:') ? url : `${API_URL}${url}`;
     
     let ext = 'pdf';
-    if (url.includes('.')) {
+    if (url.startsWith('data:')) {
+      const mime = url.split(';')[0].split(':')[1] || '';
+      if (mime.includes('pdf')) ext = 'pdf';
+      else if (mime.includes('png')) ext = 'png';
+      else if (mime.includes('jpeg') || mime.includes('jpg')) ext = 'jpg';
+      else if (mime.includes('webp')) ext = 'webp';
+    } else if (url.includes('.')) {
       const parts = url.split('.');
       const rawExt = parts[parts.length - 1].split('?')[0].toLowerCase();
       if (['pdf', 'png', 'jpg', 'jpeg', 'webp', 'doc', 'docx'].includes(rawExt)) {
@@ -184,11 +190,13 @@ export const ClientExams: React.FC = () => {
         ...f,
         tipo: detectedType,
         arquivo_url: fileUrl,
-        observacoes: f.observacoes || (realExtractedText ? `[Leitura IA do Arquivo]: ${realExtractedText.slice(0, 200)}...` : `[Arquivo Anexado]: ${file.name}`)
+        observacoes: f.observacoes || realExtractedText || ''
       }));
 
       setExtractedOcrText(
-        `📄 LEITURA PROCESSADA DO ARQUIVO REAL (${file.name})\n----------------------------------------\n${realExtractedText}\n----------------------------------------\nURL Registrada: ${fileUrl}`
+        realExtractedText
+          ? `📄 CONTEÚDO EXTRAÍDO DO ARQUIVO (${file.name})\n----------------------------------------\n${realExtractedText}`
+          : `✓ Arquivo "${file.name}" anexado com sucesso.`
       );
     } catch (err: any) {
       alert(err.message || 'Erro ao realizar upload do arquivo.');
@@ -603,7 +611,17 @@ export const ClientExams: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden animate-fadeIn">
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
               <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><FileText className="w-4 h-4 text-blue-600"/> Visualizador de Documento</h3>
-              <button onClick={() => setViewingFile(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"><X className="w-5 h-5" /></button>
+              <div className="flex items-center gap-3">
+                <a
+                  href={viewingFile.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
+                >
+                  Abrir em Nova Aba ↗
+                </a>
+                <button onClick={() => setViewingFile(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"><X className="w-5 h-5" /></button>
+              </div>
             </div>
             <div className="flex-1 bg-slate-100 p-4 overflow-auto flex items-center justify-center">
               {viewingFile.type === 'pdf' ? (

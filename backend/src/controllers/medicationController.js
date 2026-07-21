@@ -88,7 +88,14 @@ const createMedication = async (req, res) => {
       insertedId = Array.isArray(resQuery) ? resQuery[0] : resQuery;
     }
 
-    // efeitos is already saved on medicamentos.efeitos column above — no need for separate insert
+    if (efeitos && efeitos.trim() !== '') {
+      await db('efeitos_medicamentos').insert({
+        medicamento_id: insertedId,
+        cliente_id: realClienteId,
+        efeito: efeitos.trim(),
+        criado_em: mysqlDate
+      }).catch(err => console.warn('Aviso insert efeitos_medicamentos:', err.message));
+    }
 
     if (email_lembrete) {
       sendReminderEmail(email_lembrete, nome, horarios).catch(console.error);
@@ -125,7 +132,15 @@ const updateMedication = async (req, res) => {
       await dbHelper.query('medicamentos', 'update', { id: mId }, updateData);
     }
 
-    // efeitos is already updated in medicamentos.efeitos column above
+    if (efeitos && efeitos.trim() !== '') {
+      const med = await db('medicamentos').where({ id: mId }).first().catch(() => null);
+      await db('efeitos_medicamentos').insert({
+        medicamento_id: mId,
+        cliente_id: med ? med.cliente_id : null,
+        efeito: efeitos.trim(),
+        criado_em: mysqlDate
+      }).catch(err => console.warn('Aviso insert efeitos_medicamentos:', err.message));
+    }
 
     return res.json({ message: 'Medicamento atualizado com sucesso' });
   } catch (err) {
@@ -265,9 +280,37 @@ const sendManualReminder = async (req, res) => {
 const getMedicationEffects = async (req, res) => {
   const { medicamento_id } = req.params;
   try {
-    const effects = await dbHelper.query('efeitos_medicamentos', 'select', { medicamento_id });
+    const mId = parseInt(medicamento_id);
+    const med = await db('medicamentos').where({ id: mId }).first().catch(() => null);
+
+    let effects = [];
+    try {
+      effects = await db('efeitos_medicamentos')
+        .where({ medicamento_id: mId })
+        .orWhere({ registro_id: mId })
+        .orderBy('criado_em', 'desc')
+        .select();
+    } catch {
+      effects = await dbHelper.query('efeitos_medicamentos', 'select', { medicamento_id: mId });
+    }
+
+    if (med && med.efeitos && med.efeitos.trim() !== '') {
+      const initialEffect = med.efeitos.trim();
+      const alreadyHas = Array.isArray(effects) && effects.some(e => e.efeito === initialEffect);
+      if (!alreadyHas) {
+        effects.unshift({
+          id: 'initial_' + mId,
+          medicamento_id: mId,
+          cliente_id: med.cliente_id,
+          efeito: initialEffect,
+          criado_em: med.criado_em || new Date().toISOString()
+        });
+      }
+    }
+
     return res.json(effects);
   } catch (err) {
+    console.error('Erro em getMedicationEffects:', err);
     return res.status(500).json({ error: 'Erro ao buscar efeitos' });
   }
 };
@@ -275,16 +318,29 @@ const getMedicationEffects = async (req, res) => {
 const logMedicationEffect = async (req, res) => {
   const { medicamento_id } = req.params;
   const { efeito } = req.body;
-  if (!efeito) return res.status(400).json({ error: 'Efeito é obrigatório' });
+  if (!efeito || !efeito.trim()) return res.status(400).json({ error: 'Efeito é obrigatório' });
   try {
-    const novo = { medicamento_id, efeito, criado_em: new Date().toISOString() };
+    const mId = parseInt(medicamento_id);
+    const mysqlDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const med = await db('medicamentos').where({ id: mId }).first().catch(() => null);
+
+    const novo = {
+      medicamento_id: mId,
+      cliente_id: med ? med.cliente_id : null,
+      efeito: efeito.trim(),
+      criado_em: mysqlDate
+    };
+
+    let id;
     try {
-      const [id] = await db('efeitos_medicamentos').insert(novo);
-      return res.status(201).json({ id, ...novo });
+      const [inserted] = await db('efeitos_medicamentos').insert(novo);
+      id = inserted;
     } catch {
       const created = await dbHelper.query('efeitos_medicamentos', 'insert', novo);
-      return res.status(201).json(created);
+      id = Array.isArray(created) ? created[0] : created;
     }
+
+    return res.status(201).json({ id, ...novo });
   } catch (err) {
     console.error('Erro ao registrar efeito de medicamento:', err);
     return res.status(500).json({ error: 'Erro ao registrar efeito' });

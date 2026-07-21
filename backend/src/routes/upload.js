@@ -135,9 +135,9 @@ router.post('/', upload.single('file'), async (req, res) => {
     console.error('Aviso na leitura do arquivo:', e.message);
   }
 
-  const finalExtracted = extractedText && extractedText.length > 0
-    ? extractedText
-    : `DOCUMENTO DIGITALIZADO (${req.file.originalname}): O arquivo foi anexado com sucesso.`;
+  const finalExtracted = extractedText && extractedText.trim().length > 0
+    ? extractedText.trim()
+    : '';
 
   // Grava permanentemente na tabela arquivos_upload do MySQL
   let uploadId = null;
