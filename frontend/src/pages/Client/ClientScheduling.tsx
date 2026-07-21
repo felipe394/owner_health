@@ -182,8 +182,15 @@ export const ClientScheduling: React.FC = () => {
 
   const handleBookSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bookingModal || !bookingSlot) {
-      alert('Selecione um horário para confirmar.');
+    if (!bookingModal) return;
+
+    if (isMonthClosed) {
+      alert('Agenda desse mês está fechada, aguarde a liberação de agenda.');
+      return;
+    }
+
+    if (!bookingSlot || availableSlots.length === 0) {
+      alert('Não tem horário disponível nessa data, aguarde a disponibilidade do médico.');
       return;
     }
 
