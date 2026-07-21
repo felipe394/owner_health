@@ -279,10 +279,51 @@ const getSharedPatientData = async (req, res) => {
       return res.status(404).json({ error: 'Paciente não encontrado ou compartilhamento não autorizado.' });
     }
 
-    const exams = await dbHelper.query('exames', 'select', { cliente_id: client.id });
-    const prescriptions = await dbHelper.query('receitas', 'select', { cliente_id: client.id });
-    const bioimpedance = await dbHelper.query('bioimpedancia', 'select', { cliente_id: client.id });
-    const anamnesis = await dbHelper.query('anamnese', 'select', { cliente_id: client.id });
+    const exams = await dbHelper.query('exames', 'select', { cliente_id: client.id }).catch(() => []);
+    const prescriptions = await dbHelper.query('receitas', 'select', { cliente_id: client.id }).catch(() => []);
+    const bioimpedance = await dbHelper.query('bioimpedancia', 'select', { cliente_id: client.id }).catch(() => []);
+    const legacyAnamnesis = await dbHelper.query('anamnese', 'select', { cliente_id: client.id }).catch(() => []);
+
+    let structuredAnamnesis = [];
+    try {
+      const requests = await db('patient_anamnesis_requests')
+        .where({ cliente_id: client.id })
+        .whereIn('status', ['concluido', 'respondido'])
+        .orderBy('respondido_em', 'desc')
+        .select();
+
+      for (const reqItem of requests) {
+        const answers = await db('patient_anamnesis_answers')
+          .where({ request_id: reqItem.id })
+          .select();
+
+        const qIds = answers.map(a => a.question_id);
+        const questions = qIds.length > 0
+          ? await db('patient_anamnesis_questions').whereIn('id', qIds).select()
+          : [];
+
+        const qMap = new Map();
+        questions.forEach(q => qMap.set(q.id, q.texto));
+
+        const formattedAnswers = answers.map(a => ({
+          pergunta: qMap.get(a.question_id) || `Pergunta #${a.question_id}`,
+          resposta: a.resposta
+        }));
+
+        structuredAnamnesis.push({
+          id: 'req_' + reqItem.id,
+          request_id: reqItem.id,
+          tipo: 'estruturada',
+          status: reqItem.status,
+          criado_em: reqItem.respondido_em || reqItem.criado_em,
+          respostas: formattedAnswers
+        });
+      }
+    } catch (e) {
+      console.warn('Aviso ao carregar anamnese estruturada:', e.message);
+    }
+
+    const allAnamnesis = [...structuredAnamnesis, ...legacyAnamnesis];
 
     return res.json({
       patient: {
@@ -301,7 +342,7 @@ const getSharedPatientData = async (req, res) => {
       exams,
       prescriptions,
       bioimpedance,
-      anamnesis
+      anamnesis: allAnamnesis
     });
   } catch (err) {
     console.error(err);

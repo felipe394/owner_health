@@ -7,6 +7,25 @@ import { API_URL } from '../../config';
 import { PatientRegistrationModal } from '../../components/PatientRegistrationModal';
 import { PatientAnamnesisCustomizerModal } from './PatientAnamnesisCustomizerModal';
 
+const formatDatePtBr = (dateStr?: string | null) => {
+  if (!dateStr || typeof dateStr !== 'string' || dateStr.trim() === '') return 'Não informada';
+  const str = dateStr.trim();
+  if (str.includes('/')) return str;
+  const rawDate = str.split('T')[0];
+  const parts = rawDate.split('-');
+  if (parts.length === 3) {
+    const [y, m, d] = parts;
+    if (y && m && d && y.length === 4) {
+      return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+    }
+  }
+  try {
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d.toLocaleDateString('pt-BR');
+  } catch {}
+  return 'Não informada';
+};
+
 export const CompanyPatientData: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -196,7 +215,7 @@ export const CompanyPatientData: React.FC = () => {
                 <div>
                   <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Nascimento</p>
                   <p className="text-slate-800 font-bold mt-0.5">
-                    {new Date(patientData.patient.data_nascimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                    {formatDatePtBr(patientData.patient.data_nascimento)}
                   </p>
                 </div>
                 <div>
@@ -277,50 +296,47 @@ export const CompanyPatientData: React.FC = () => {
                     </div>
 
                     {patientData.anamnesis.length === 0 ? (
-                      <p className="text-xs text-slate-400 font-semibold italic text-center py-10">O paciente não preencheu o formulário de anamnese legado.</p>
+                      <p className="text-xs text-slate-400 font-semibold italic text-center py-10">O paciente ainda não possui formulários de anamnese preenchidos.</p>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs font-semibold text-slate-600">
+                      <div className="space-y-6">
                         {patientData.anamnesis.map((a: any) => (
-                          <React.Fragment key={a.id}>
-                            <div className="sm:col-span-2 border-b border-slate-100 pb-2 flex justify-between text-slate-400">
-                              <span>Prontuário Preenchido em:</span>
-                              <span className="font-bold">{new Date(a.criado_em).toLocaleDateString('pt-BR')}</span>
+                          <div key={a.id} className="border border-slate-200 rounded-2xl p-5 bg-slate-50 space-y-4 shadow-sm">
+                            <div className="border-b border-slate-200 pb-3 flex items-center justify-between">
+                              <span className="text-xs font-black text-indigo-700 uppercase tracking-wider flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-indigo-600" />
+                                {a.tipo === 'estruturada' ? 'Formulário de Anamnese Preenchido' : 'Anamnese Geral'}
+                              </span>
+                              <span className="text-xs font-bold text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">
+                                {formatDatePtBr(a.criado_em)}
+                              </span>
                             </div>
-                            <div className="sm:col-span-2 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                              <p className="text-[10px] text-indigo-600 font-black uppercase tracking-wider">Queixa Principal</p>
-                              <p className="text-slate-800 font-bold mt-1 leading-relaxed">{a.queixa_principal || 'Não informada'}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Histórico de Doenças</p>
-                              <p className="text-slate-800 font-bold mt-1 leading-relaxed">{a.historico_doencas || 'Nenhum'}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Alergias</p>
-                              <p className="text-slate-800 font-bold mt-1 leading-relaxed">{a.alergias || 'Nenhuma'}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Medicamentos em Uso</p>
-                              <p className="text-slate-800 font-bold mt-1 leading-relaxed">{a.medicamentos_uso || 'Nenhum'}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Histórico Familiar</p>
-                              <p className="text-slate-800 font-bold mt-1 leading-relaxed">{a.historico_familiar || 'Nenhum'}</p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Hábitos</p>
-                              <p className="text-slate-800 font-bold mt-1 leading-relaxed">{a.habitos || 'Sem hábitos declarados'}</p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Pressão Arterial</p>
-                                <p className="text-slate-800 font-bold mt-1">{a.pressao_arterial || 'N/I'}</p>
+
+                            {a.tipo === 'estruturada' && Array.isArray(a.respostas) ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                                {a.respostas.map((r: any, idx: number) => (
+                                  <div key={idx} className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">{r.pergunta}</p>
+                                    <p className="text-xs font-black text-slate-800 mt-1">{r.resposta || 'Sem resposta'}</p>
+                                  </div>
+                                ))}
                               </div>
-                              <div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Glicemia</p>
-                                <p className="text-slate-800 font-bold mt-1">{a.glicemia || 'N/I'}</p>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold text-slate-600">
+                                <div className="sm:col-span-2 bg-white p-3 rounded-lg border border-slate-100">
+                                  <p className="text-[10px] text-indigo-600 font-black uppercase">Queixa Principal</p>
+                                  <p className="text-slate-800 font-bold mt-1">{a.queixa_principal || 'Não informada'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase">Histórico de Doenças</p>
+                                  <p className="text-slate-800 font-bold mt-1">{a.historico_doencas || 'Nenhum'}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase">Alergias</p>
+                                  <p className="text-slate-800 font-bold mt-1">{a.alergias || 'Nenhuma'}</p>
+                                </div>
                               </div>
-                            </div>
-                          </React.Fragment>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}

@@ -40,7 +40,26 @@ export const ClientExams: React.FC = () => {
   const [extractedOcrText, setExtractedOcrText] = useState('');
   const [aiWarnings, setAiWarnings] = useState<string[]>([]);
 
-  // Temporary share states
+  const downloadExamTemplate = () => {
+    const templateText = `================================================
+MODELO DE EXAME / RESULTADO - OWNER HEALTH
+================================================
+
+TIPO DE EXAME: Hemograma Completo
+DATA DO EXAME: 21/07/2026
+LABORATÓRIO: Laboratório Central de Análises
+MÉDICO SOLICITANTE: Dr. Roberto Santos
+
+RESULTADOS E LAUDO:
+Teste de exame concluído sem alterações.
+================================================`;
+
+    const blob = new Blob([templateText], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'modelo_exame_ownerhealth.txt';
+    link.click();
+  };
   const [showShareModal, setShowShareModal] = useState<Exam | null>(null);
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [selectedProfId, setSelectedProfId] = useState('');
@@ -451,41 +470,67 @@ export const ClientExams: React.FC = () => {
               {error && <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2.5 rounded-lg text-sm font-semibold">{error}</div>}
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-600 mb-1.5">Upload do Exame (IA OCR lera automaticamente)</label>
-                  <label className="flex flex-col items-center justify-center gap-2 cursor-pointer bg-slate-50 border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-xl px-4 py-6 transition">
+                <div className="col-span-2 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700">Anexo e Leitura Automática de Exame</label>
+                    <button
+                      type="button"
+                      onClick={downloadExamTemplate}
+                      className="text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Baixar Modelo de Exame (.txt)
+                    </button>
+                  </div>
+
+                  <label className="flex flex-col items-center justify-center gap-2 cursor-pointer bg-slate-50 border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-xl px-4 py-5 transition">
                     {ocrLoading ? (
                       <>
                         <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                        <span className="text-sm text-blue-600 font-black animate-pulse">A Inteligência Artificial está lendo o laudo...</span>
+                        <span className="text-xs text-blue-600 font-black animate-pulse">Analisando e lendo informações do documento...</span>
                       </>
                     ) : (
                       <>
                         <Upload className="w-6 h-6 text-slate-400" />
-                        <span className="text-sm text-slate-600 font-bold">{form.arquivo_url ? '✓ Exame anexado com sucesso' : 'Selecione o arquivo do exame'}</span>
-                        <span className="text-[10px] text-slate-400">PDF, JPG, PNG (IA extrairá taxas e preencherá a tela)</span>
+                        <span className="text-xs text-slate-700 font-bold">{form.arquivo_url ? '✓ Documento anexado' : 'Clique para selecionar o arquivo do exame'}</span>
+                        <span className="text-[10.5px] text-slate-400">Aceita arquivos em formato PDF, PNG ou JPG</span>
                       </>
                     )}
-                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileUpload} className="hidden" disabled={ocrLoading} />
+                    <input type="file" accept=".pdf,.jpg,.jpeg,.png,.txt" onChange={handleFileUpload} className="hidden" disabled={ocrLoading} />
                   </label>
                 </div>
+
+                {/* Status Banner */}
+                {form.arquivo_url && !ocrLoading && (
+                  <div className="col-span-2">
+                    {extractedOcrText ? (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 flex items-start gap-2.5 text-emerald-900">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-emerald-800">Leitura do Documento Concluída com Sucesso!</p>
+                          <p className="text-[11px] font-medium text-emerald-700 mt-0.5">O conteúdo lido no arquivo foi preenchido nos campos abaixo.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-start gap-2.5 text-red-900">
+                        <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-red-800">Documento Sem Camada de Texto Pesquisável</p>
+                          <p className="text-[11px] font-medium text-red-700 mt-0.5">O arquivo anexado parece ser uma foto ou scanner. Você pode preencher os campos abaixo manualmente.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {aiWarnings.length > 0 && (
                   <div className="col-span-2 bg-amber-50 border border-amber-200 rounded-xl p-3.5 space-y-1 text-amber-900">
                     <div className="flex items-center gap-1.5 font-bold text-xs text-amber-800">
                       <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Validação do Leitor de Exames:</span>
+                      <span>Observações de Leitura:</span>
                     </div>
                     {aiWarnings.map((w, idx) => (
                       <p key={idx} className="text-[11px] font-medium leading-normal pl-5">{w}</p>
                     ))}
-                  </div>
-                )}
-
-                {extractedOcrText && (
-                  <div className="col-span-2 bg-slate-900 text-slate-200 rounded-xl p-4 font-mono text-[10.5px] leading-relaxed whitespace-pre shadow-inner">
-                    <p className="text-[9px] text-blue-400 font-bold uppercase tracking-widest mb-1.5">// TEXTO EXTRAÍDO DO ARQUIVO ANEXADO</p>
-                    {extractedOcrText}
                   </div>
                 )}
 
