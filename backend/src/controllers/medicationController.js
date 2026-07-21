@@ -44,21 +44,9 @@ const getMedications = async (req, res) => {
       .where({ cliente_id: realClienteId })
       .select();
 
-    const medIds = meds.map(m => m.id);
-    const effects = medIds.length > 0
-      ? await db('efeitos_medicamentos').whereIn('medicamento_id', medIds).orderBy('criado_em', 'desc').select()
-      : [];
-
-    const effectMap = new Map();
-    effects.forEach(e => {
-      if (!effectMap.has(e.medicamento_id)) {
-        effectMap.set(e.medicamento_id, e.efeito);
-      }
-    });
-
     const result = meds.map(m => ({
       ...m,
-      efeitos: m.efeitos || effectMap.get(m.id) || null
+      efeitos: m.efeitos || null
     }));
 
     return res.json(result);
@@ -100,13 +88,7 @@ const createMedication = async (req, res) => {
       insertedId = Array.isArray(resQuery) ? resQuery[0] : resQuery;
     }
 
-    if (efeitos) {
-      await db('efeitos_medicamentos').insert({
-        medicamento_id: insertedId,
-        efeito: efeitos,
-        criado_em: mysqlDate
-      }).catch(() => {});
-    }
+    // efeitos is already saved on medicamentos.efeitos column above — no need for separate insert
 
     if (email_lembrete) {
       sendReminderEmail(email_lembrete, nome, horarios).catch(console.error);
@@ -143,13 +125,7 @@ const updateMedication = async (req, res) => {
       await dbHelper.query('medicamentos', 'update', { id: mId }, updateData);
     }
 
-    if (efeitos) {
-      await db('efeitos_medicamentos').insert({
-        medicamento_id: mId,
-        efeito: efeitos,
-        criado_em: mysqlDate
-      }).catch(() => {});
-    }
+    // efeitos is already updated in medicamentos.efeitos column above
 
     return res.json({ message: 'Medicamento atualizado com sucesso' });
   } catch (err) {
