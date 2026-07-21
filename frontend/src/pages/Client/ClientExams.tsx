@@ -38,6 +38,7 @@ export const ClientExams: React.FC = () => {
   // AI OCR simulator states
   const [ocrLoading, setOcrLoading] = useState(false);
   const [extractedOcrText, setExtractedOcrText] = useState('');
+  const [aiWarnings, setAiWarnings] = useState<string[]>([]);
 
   // Temporary share states
   const [showShareModal, setShowShareModal] = useState<Exam | null>(null);
@@ -162,40 +163,41 @@ export const ClientExams: React.FC = () => {
         body: formData
       });
 
-      if (!uploadRes.ok) throw new Error('Falha no upload do arquivo');
       const uploadData = await uploadRes.json();
       
       const fileUrl = uploadData.url;
       const realExtractedText = uploadData.extractedText || '';
+      const analysis = uploadData.analysis || {};
+
+      setAiWarnings(Array.isArray(analysis.warnings) ? analysis.warnings : []);
       
       // Detecção inteligente baseada no nome do arquivo e texto lido
       const fileLower = (file.name + ' ' + realExtractedText).toLowerCase();
-      let detectedType = form.tipo || '';
+      let detectedType = analysis.tipo || form.tipo || '';
       
-      for (const t of EXAM_TYPES) {
-        if (fileLower.includes(t.toLowerCase())) {
-          detectedType = t;
-          break;
+      if (!detectedType || detectedType === 'Outro') {
+        for (const t of EXAM_TYPES) {
+          if (fileLower.includes(t.toLowerCase())) {
+            detectedType = t;
+            break;
+          }
         }
       }
-      if (!detectedType || detectedType === 'Outro') {
-        if (fileLower.includes('sangue') || fileLower.includes('glicose') || fileLower.includes('glicemia')) detectedType = 'Glicemia em Jejum';
-        else if (fileLower.includes('coracao') || fileLower.includes('ecg') || fileLower.includes('eletro')) detectedType = 'Eletrocardiograma';
-        else if (fileLower.includes('urina') || fileLower.includes('eas') || fileLower.includes('creatinina')) detectedType = 'Ureia e Creatinina';
-        else if (fileLower.includes('rx') || fileLower.includes('raio')) detectedType = 'Raio-X';
-        else detectedType = 'Hemograma Completo';
-      }
+      if (!detectedType) detectedType = 'Hemograma Completo';
 
       setForm(f => ({
         ...f,
         tipo: detectedType,
+        data: analysis.data || f.data,
+        laboratorio: analysis.laboratorio || f.laboratorio,
+        medico_solicitante: analysis.medico_solicitante || f.medico_solicitante,
         arquivo_url: fileUrl,
         observacoes: f.observacoes || realExtractedText || ''
       }));
 
       setExtractedOcrText(
         realExtractedText
-          ? `📄 CONTEÚDO EXTRAÍDO DO ARQUIVO (${file.name})\n----------------------------------------\n${realExtractedText}`
+          ? realExtractedText
           : `✓ Arquivo "${file.name}" anexado com sucesso.`
       );
     } catch (err: any) {
@@ -468,9 +470,21 @@ export const ClientExams: React.FC = () => {
                   </label>
                 </div>
 
+                {aiWarnings.length > 0 && (
+                  <div className="col-span-2 bg-amber-50 border border-amber-200 rounded-xl p-3.5 space-y-1 text-amber-900">
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-amber-800">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Validação do Leitor de Exames:</span>
+                    </div>
+                    {aiWarnings.map((w, idx) => (
+                      <p key={idx} className="text-[11px] font-medium leading-normal pl-5">{w}</p>
+                    ))}
+                  </div>
+                )}
+
                 {extractedOcrText && (
                   <div className="col-span-2 bg-slate-900 text-slate-200 rounded-xl p-4 font-mono text-[10.5px] leading-relaxed whitespace-pre shadow-inner">
-                    <p className="text-[9px] text-blue-400 font-bold uppercase tracking-widest mb-1.5">// TEXTO EXTRAÍDO PELA IA DO OWNER HEALTH</p>
+                    <p className="text-[9px] text-blue-400 font-bold uppercase tracking-widest mb-1.5">// TEXTO EXTRAÍDO DO ARQUIVO ANEXADO</p>
                     {extractedOcrText}
                   </div>
                 )}

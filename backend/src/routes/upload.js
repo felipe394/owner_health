@@ -53,7 +53,7 @@ async function extractPdfText(dataBuffer) {
     try {
       const pdfData = await pdfParse(dataBuffer);
       if (pdfData && pdfData.text && pdfData.text.trim().length > 0) {
-        text = pdfData.text.replace(/\s+/g, ' ').trim();
+        text = pdfData.text.replace(/\r\n/g, '\n').replace(/[ \t]+/g, ' ').trim();
       }
     } catch (err) {
       console.warn('pdfParse notice:', err.message);
@@ -63,83 +63,123 @@ async function extractPdfText(dataBuffer) {
   if (!text || text.length < 3) {
     try {
       const bufferStr = dataBuffer.toString('binary');
-      const streamRegex = /stream[\r\n]+([\s\S]*?)endstream/g;
-      let match;
-      const foundTexts = [];
+      // Match literal text strings (word) Tj or (word) TJ
+      const literalMatches = bufferStr.match(/\\(([^\\(\\)\\\\]{2,100})\\)/g) || [];
+      const cleanedLiterals = literalMatches
+        .map(m => m.slice(1, -1).trim())
+        .filter(s => s.length >= 2 && !s.includes('Font') && !s.includes('Adobe') && !s.includes('Identity') && !s.includes('ProcSet') && !s.includes('Catalog'));
 
-      while ((match = streamRegex.exec(bufferStr)) !== null) {
-        const streamData = Buffer.from(match[1], 'binary');
-        let uncompressed = '';
-        try {
-          uncompressed = zlib.inflateSync(streamData).toString('utf-8');
-        } catch {
-          uncompressed = streamData.toString('binary');
-        }
-
-        // Match hex strings <005400450053...>
-        const hexRegex = /<([0-9A-Fa-f]{8,})>/g;
-        let hm;
-        while ((hm = hexRegex.exec(uncompressed)) !== null) {
-          const decoded = decodePdfHex(hm[1]);
-          if (decoded && decoded.length >= 2 && !decoded.includes('Identity') && !decoded.includes('Font')) {
-            foundTexts.push(decoded);
-          }
-        }
-
-        // Match literal strings (text)
-        const literalRegex = /\(([a-zA-Z0-9\sÁÉÍÓÚáéíóúÀàÃãÕõÇç\-:,.]{2,})\)/g;
-        let tm;
-        while ((tm = literalRegex.exec(uncompressed)) !== null) {
-          const str = tm[1].trim();
-          if (str && !str.includes('Identity') && !str.includes('Font') && !str.includes('Adobe') && !str.includes('Microsoft')) {
-            foundTexts.push(str);
-          }
-        }
-      }
-
-      if (foundTexts.length > 0) {
-        text = Array.from(new Set(foundTexts)).join(' ');
+      if (cleanedLiterals.length > 0) {
+        text = cleanedLiterals.join(' ');
       }
     } catch (e) {
-      console.warn('Stream extraction notice:', e.message);
+      console.warn('Literal extraction notice:', e.message);
     }
   }
 
   return text.trim();
 }
 
+function analyzeMedicalDocument(text, fileName = '') {
+  const fullContent = (fileName + ' ' + text).toLowerCase();
+  const warnings = [];
+
+  let tipo = '';
+  if (fullContent.includes('hemograma')) tipo = 'Hemograma Completo';
+  else if (fullContent.includes('glicem') || fullContent.includes('glicose')) tipo = 'Glicemia em Jejum';
+  else if (fullContent.includes('colesterol') || fullContent.includes('lipid')) tipo = 'Perfil Lipídico';
+  else if (fullContent.includes('urina') || fullContent.includes('eas')) tipo = 'Ureia e Creatinina';
+  else if (fullContent.includes('raio-x') || fullContent.includes('raio x') || fullContent.includes('radiograf')) tipo = 'Raio-X';
+  else if (fullContent.includes('eletro') || fullContent.includes('ecg')) tipo = 'Eletrocardiograma';
+  else if (fullContent.includes('ultrasson')) tipo = 'Ultrassonografia';
+  else if (text.trim().length > 0) tipo = 'Outro';
+
+  let data = '';
+  const dateMatch = text.match(/(\d{2})[\/.-](\d{2})[\/.-](\d{4})/);
+  if (dateMatch) {
+    const [_, d, m, y] = dateMatch;
+    data = `${y}-${m}-${d}`;
+  }
+
+  let laboratorio = '';
+  const labMatch = text.match(/(?:laborat[óo]rio|lab|cl[íi]nica)\s*:?\s*([A-Za-z0-9ÁÉÍÓÚáéíóú\s]{3,30})/i);
+  if (labMatch) laboratorio = labMatch[1].trim();
+
+  let medico = '';
+  const medMatch = text.match(/(?:dr\.?|dra\.?|m[ée]dico\s*solicitante)\s*:?\s*([A-Za-z0-9ÁÉÍÓÚáéíóú\s]{3,30})/i);
+  if (medMatch) medico = medMatch[1].trim();
+
+  if (!text || text.trim().length < 2) {
+    warnings.push('⚠️ Nenhuma camada de texto pesquisável foi encontrada no arquivo. Certifique-se de que o documento não é uma foto sem OCR.');
+  } else {
+    if (!laboratorio) warnings.push('ℹ️ Nome do Laboratório não foi identificado automaticamente no documento.');
+    if (!medico) warnings.push('ℹ️ Nome do Médico Solicitante não foi identificado automaticamente no documento.');
+    if (!data) warnings.push('ℹ️ Data do Exame não foi identificada automaticamente no documento.');
+  }
+
+  return { tipo, data, laboratorio, medico_solicitante: medico, laudo: text.trim(), warnings };
+}
+
+// Endpoint GET para download/servimento resiliente de arquivo via DB MySQL
+router.get('/file/:filename', async (req, res) => {
+  const { filename } = req.params;
+  const localFile = path.join(uploadsDir, filename);
+
+  if (fs.existsSync(localFile)) {
+    return res.sendFile(localFile);
+  }
+
+  try {
+    const record = await db('arquivos_upload').where({ filename }).first();
+    if (record && record.conteudo_base64) {
+      const buffer = Buffer.from(record.conteudo_base64, 'base64');
+      res.type(record.mimetype || 'application/octet-stream');
+      return res.send(buffer);
+    }
+  } catch (err) {
+    console.error('Erro ao buscar arquivo do MySQL:', err.message);
+  }
+
+  return res.status(404).json({ error: 'Arquivo não encontrado' });
+});
+
 router.post('/', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Nenhum arquivo enviado' });
   }
 
-  const fileUrl = `/uploads/${req.file.filename}`;
+  const fileUrl = `/api/upload/file/${req.file.filename}`;
   const filePath = req.file.path;
   const isPdf = req.file.mimetype === 'application/pdf' || req.file.originalname.toLowerCase().endsWith('.pdf');
   
   let extractedText = '';
+  let dataBuffer;
 
   try {
-    const dataBuffer = fs.readFileSync(filePath);
+    dataBuffer = fs.readFileSync(filePath);
 
     if (isPdf) {
       extractedText = await extractPdfText(dataBuffer);
     } else {
       const strContent = dataBuffer.toString('utf-8');
       const cleanText = strContent.replace(/[^\x20-\x7E\x0A\x0D\xC0-\xFF]/g, ' ').replace(/\s+/g, ' ').trim();
-      if (cleanText.length > 5) {
-        extractedText = cleanText.slice(0, 3000);
+      if (cleanText.length > 3) {
+        extractedText = cleanText.slice(0, 5000);
       }
     }
   } catch (e) {
     console.error('Aviso na leitura do arquivo:', e.message);
   }
 
-  const finalExtracted = extractedText && extractedText.trim().length > 0
-    ? extractedText.trim()
-    : '';
+  const cleanText = extractedText && extractedText.trim().length > 0 ? extractedText.trim() : '';
+  const analysis = analyzeMedicalDocument(cleanText, req.file.originalname);
 
-  // Grava permanentemente na tabela arquivos_upload do MySQL
+  // Armazena Base64 no MySQL para persistência completa
+  let base64Content = null;
+  if (dataBuffer && dataBuffer.length < 20 * 1024 * 1024) {
+    base64Content = dataBuffer.toString('base64');
+  }
+
   let uploadId = null;
   try {
     const [inserted] = await db('arquivos_upload').insert({
@@ -148,7 +188,8 @@ router.post('/', upload.single('file'), async (req, res) => {
       mimetype: req.file.mimetype,
       size: req.file.size,
       url: fileUrl,
-      texto_extraido: finalExtracted,
+      texto_extraido: cleanText,
+      conteudo_base64: base64Content,
       criado_em: new Date().toISOString()
     });
     uploadId = inserted;
@@ -163,7 +204,8 @@ router.post('/', upload.single('file'), async (req, res) => {
     original_name: req.file.originalname,
     mimetype: req.file.mimetype,
     size: req.file.size,
-    extractedText: finalExtracted
+    extractedText: cleanText,
+    analysis
   });
 });
 
